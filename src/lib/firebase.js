@@ -6,16 +6,16 @@ import { getMessaging, isSupported } from 'firebase/messaging'
 // ─── Replace these placeholders with your Firebase project config ───────────
 // Firebase Console → Project Settings → Your apps → Web app → Config
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: 'AIzaSyAhgGIhmiJYS5ZxA4N0HETLBa9W3EcWErI',
+  authDomain: 'follow-through-87d50.firebaseapp.com',
+  projectId: 'follow-through-87d50',
+  storageBucket: 'follow-through-87d50.firebasestorage.app',
+  messagingSenderId: '153740630717',
+  appId: '1:153740630717:web:46e7580b3c75564c74b5d4',
 }
 
 // VAPID key from Firebase Console → Cloud Messaging → Web configuration
-export const VAPID_KEY = 'YOUR_VAPID_KEY'
+export const VAPID_KEY = 'BL-m8BNALLZqiuaRUXPKDQ-l7AC58Wsz7JvzgPdYz8Y82jy-aRYSjIf5WzxmSb7KqAPxlGPQNSUuOWCIdVYkezg'
 
 const app = initializeApp(firebaseConfig)
 
