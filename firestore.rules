@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Users ─────────────────────────────────────────────────────────────
+    // Both authenticated users can read all profiles (needed to find partner)
+    // Each user can only write their own profile
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // ─── Tasks ─────────────────────────────────────────────────────────────
+    // Both authenticated users can read and write all tasks
+    // (shared task app — both users collaborate on the same task list)
+    match /tasks/{taskId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.requestedBy == request.auth.uid;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+  }
+}
