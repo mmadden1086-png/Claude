@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isTaskParticipant(resourceData) {
+      return request.auth.uid == resourceData.assignedTo
+        || resourceData.assignedTo == 'both'
+        || request.auth.uid == resourceData.requestedBy;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /tasks/{taskId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.requestedBy == request.auth.uid;
+      allow update: if signedIn() && isTaskParticipant(resource.data);
+      allow delete: if false;
+    }
+  }
+}

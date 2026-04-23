@@ -1,0 +1,18 @@
+{
+  "matt": {
+    "uid": "auth-uid-for-matt",
+    "name": "Matt",
+    "email": "matt@example.com",
+    "pushToken": "",
+    "totalPoints": 0,
+    "weeklyPoints": 0
+  },
+  "megan": {
+    "uid": "auth-uid-for-megan",
+    "name": "Megan",
+    "email": "megan@example.com",
+    "pushToken": "",
+    "totalPoints": 0,
+    "weeklyPoints": 0
+  }
+}
