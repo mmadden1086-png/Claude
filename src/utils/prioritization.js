@@ -65,7 +65,6 @@ export const isFutureTask = (task) => {
 // Lower = higher priority
 
 const URGENCY_WEIGHT = { high: 0, medium: 1, low: 2 }
-const EFFORT_WEIGHT = { Quick: 0, Medium: 1, Heavy: 2 }
 
 const getPriorityScore = (task, uid) => {
   let score = 0
@@ -106,11 +105,11 @@ export const getOverdueTasks = (tasks) =>
 export const getNeedsAttentionTasks = (tasks) => {
   const fiveDaysMs = 5 * 24 * 60 * 60 * 1000
   return tasks.filter((t) => {
-    if (t.isCompleted || isActivelySnoozed(t)) return false
-    const old =
+    if (t.isCompleted || isActivelySnoozed(t) || isOverdue(t)) return false
+    return (
       t.createdAt instanceof Date &&
       differenceInMilliseconds(now(), t.createdAt) > fiveDaysMs
-    return isOverdue(t) || old
+    )
   })
 }
 

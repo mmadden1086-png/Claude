@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { addDays, startOfDay, nextMonday } from 'date-fns'
+import { addDays, addHours, startOfDay, nextMonday } from 'date-fns'
 import { useAuth } from './AuthContext'
 import {
   subscribeToTasks,
@@ -27,7 +27,7 @@ export const useTasks = () => {
 const EFFORT_POINTS = { Quick: 1, Medium: 2, Heavy: 3 }
 
 const SNOOZE_PRESETS = {
-  '1h': () => addDays(new Date(), 0.042),
+  '1h': () => addHours(new Date(), 1),
   tonight: () => {
     const d = new Date()
     d.setHours(20, 0, 0, 0)

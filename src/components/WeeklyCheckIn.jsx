@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 const WeeklyCheckIn = ({ onClose }) => {
   const { tasks } = useTasks()
-  const { userProfile, partnerProfile } = useTasks()
+  const { userProfile, partnerProfile } = useAuth()
 
   const completedThisWeek = tasks.filter(
     (t) =>

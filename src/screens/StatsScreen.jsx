@@ -17,7 +17,9 @@ const StatsScreen = () => {
   const { currentUser, userProfile, partnerProfile } = useAuth()
 
   const completed = tasks.filter((t) => t.isCompleted)
-  const myCompleted = completed.filter((t) => t.completedAt)
+  const myCompleted = completed.filter(
+    (t) => t.completedAt && t.assignedTo === currentUser?.uid
+  )
 
   const thisWeek = myCompleted.filter(
     (t) => t.completedAt instanceof Date && isThisWeek(t.completedAt, { weekStartsOn: 0 })
