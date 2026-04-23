@@ -13,6 +13,7 @@ import {
   getDocs,
   where,
   Timestamp,
+  increment,
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -39,13 +40,9 @@ export const getAllUsers = async () => {
 }
 
 export const updateUserPoints = async (uid, weeklyDelta, totalDelta) => {
-  const ref = doc(db, 'users', uid)
-  const snap = await getDoc(ref)
-  if (!snap.exists()) return
-  const { weeklyPoints = 0, totalPoints = 0 } = snap.data()
-  await updateDoc(ref, {
-    weeklyPoints: Math.max(0, weeklyPoints + weeklyDelta),
-    totalPoints: Math.max(0, totalPoints + totalDelta),
+  await updateDoc(doc(db, 'users', uid), {
+    weeklyPoints: increment(weeklyDelta),
+    totalPoints: increment(totalDelta),
   })
 }
 

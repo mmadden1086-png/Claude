@@ -84,14 +84,6 @@ const DoThisNext = ({ focusMode = false }) => {
         >
           Snooze
         </button>
-        {!focusMode && (
-          <button
-            onClick={() => {}}
-            className="min-h-[48px] py-3 px-5 bg-slate-700 rounded-xl text-white text-sm active:bg-slate-600"
-          >
-            Start
-          </button>
-        )}
       </div>
 
       {/* Snooze menu */}
