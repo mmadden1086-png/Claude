@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { ConfirmModal } from './ConfirmModal'
 import { TimeSelect } from './TimeSelect'
 import {
   BOTH_ASSIGNEE_ID,
@@ -10,7 +11,7 @@ import {
   WEEKDAY_OPTIONS,
   getCanonicalUserName,
 } from '../lib/constants'
-import { normalizeTimeValue, toDate } from '../lib/format'
+import { describeRepeat, formatDueContext, formatStatusLabel, formatTaskAge, normalizeTimeValue, toDate } from '../lib/format'
 import { generateRelationalWhy, saveWhyPattern } from '../lib/relationalWhyEngine'
 import { generateDoneSuggestion, saveDonePattern } from '../lib/suggestionEngine'
 import { buildRepeatPreview } from '../lib/task-utils'
@@ -44,6 +45,9 @@ function createFormState(task) {
 
 export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose, onSave, onDelete }) {
   const [form, setForm] = useState(() => createFormState(task))
+  const [isEditing, setIsEditing] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [whyTouched, setWhyTouched] = useState(Boolean(task.whyThisMatters?.trim()))
   const [whyIsSuggested, setWhyIsSuggested] = useState(false)
   const [doneSuggestion, setDoneSuggestion] = useState('')
@@ -169,6 +173,162 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
       nextOccurrenceAt: repeatPreview?.toISOString() ?? null,
     })
     if (!result?.blocked) onClose()
+  }
+
+  async function handleDelete(scope = 'single') {
+    if (deleteBusy) return
+    setDeleteBusy(true)
+    try {
+      await onDelete?.({ scope })
+      setDeleteConfirmOpen(false)
+      onClose?.()
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  const requestedByName = usersById[task.requestedBy]?.name
+    ? getCanonicalUserName(usersById[task.requestedBy]?.email, usersById[task.requestedBy]?.name)
+    : task.requestedBy === currentUser?.id
+      ? currentUser?.name
+      : 'Partner'
+  const assignedToName = task.assignedTo === BOTH_ASSIGNEE_ID
+    ? 'Both'
+    : assigneeOptions.find((user) => user.id === task.assignedTo)?.name ?? 'Unassigned'
+  const repeatText = describeRepeat(task)
+  const taskAge = formatTaskAge(task)
+
+  if (!isEditing) {
+    return (
+      <section className="fixed inset-0 z-50 overflow-y-auto bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+        <div
+          className="mx-auto max-h-[calc(100vh-3rem)] max-w-2xl overflow-y-auto rounded-4xl bg-panel p-5 shadow-card"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-accent">Task detail</p>
+              <h2 className="mt-2 text-2xl font-semibold text-ink">{task.title}</h2>
+            </div>
+            <button className="rounded-full bg-white p-3 text-slate-600" type="button" onClick={onClose}>
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-3xl bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                <p className="mt-2 text-sm text-ink">{formatStatusLabel(task)}</p>
+              </div>
+              <div className="rounded-3xl bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Due</p>
+                <p className="mt-2 text-sm text-ink">{formatDueContext(task)}</p>
+              </div>
+              <div className="rounded-3xl bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assigned to</p>
+                <p className="mt-2 text-sm text-ink">{assignedToName}</p>
+              </div>
+              <div className="rounded-3xl bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Requested by</p>
+                <p className="mt-2 text-sm text-ink">{requestedByName}</p>
+              </div>
+            </div>
+
+            {task.notes ? (
+              <div className="rounded-3xl bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</p>
+                <p className="mt-2 text-sm text-slate-700">{task.notes}</p>
+              </div>
+            ) : null}
+
+            {task.clarity ? (
+              <div className="rounded-3xl bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Done when</p>
+                <p className="mt-2 text-sm text-slate-700">{task.clarity}</p>
+              </div>
+            ) : null}
+
+            {task.whyThisMatters ? (
+              <div className="rounded-3xl bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Why this matters</p>
+                <p className="mt-2 text-sm text-slate-700">{task.whyThisMatters}</p>
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {task.category ? (
+                <div className="rounded-3xl bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</p>
+                  <p className="mt-2 text-sm text-ink">{task.category}</p>
+                </div>
+              ) : null}
+              {task.effort ? (
+                <div className="rounded-3xl bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Effort</p>
+                  <p className="mt-2 text-sm text-ink">{task.effort}</p>
+                </div>
+              ) : null}
+              {task.urgency ? (
+                <div className="rounded-3xl bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Urgency</p>
+                  <p className="mt-2 text-sm text-ink">{task.urgency}</p>
+                </div>
+              ) : null}
+              {repeatText ? (
+                <div className="rounded-3xl bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Repeat</p>
+                  <p className="mt-2 text-sm text-ink">{repeatText}</p>
+                </div>
+              ) : null}
+              {taskAge ? (
+                <div className="rounded-3xl bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Added</p>
+                  <p className="mt-2 text-sm text-ink">{taskAge}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex gap-3">
+              <button className="flex-1 rounded-3xl bg-ink px-4 py-4 font-semibold text-white" type="button" onClick={() => setIsEditing(true)}>
+                Edit task
+              </button>
+              <button className="rounded-3xl bg-white px-5 py-4 font-medium text-slate-700" type="button" onClick={onClose}>
+                Close
+              </button>
+            </div>
+
+            <button
+              className="w-full rounded-3xl bg-danger/10 px-4 py-4 text-sm font-semibold text-danger transition duration-150 active:scale-[0.99] active:opacity-80"
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              Delete task
+            </button>
+          </div>
+        </div>
+        {deleteConfirmOpen ? (
+          <ConfirmModal
+            title={`Delete "${task.title}"?`}
+            body={(task.repeatType ?? 'none') !== 'none' ? 'Do you want to delete just this task or all future repeats?' : 'This cannot be undone.'}
+            actions={
+              (task.repeatType ?? 'none') !== 'none'
+                ? [
+                    { label: 'Cancel', onClick: () => setDeleteConfirmOpen(false), tone: 'default' },
+                    { label: 'This task only', onClick: () => handleDelete('single'), tone: 'primary', disabled: deleteBusy },
+                    { label: 'All future', onClick: () => handleDelete('future'), tone: 'danger', disabled: deleteBusy },
+                  ]
+                : [
+                    { label: 'Cancel', onClick: () => setDeleteConfirmOpen(false), tone: 'default' },
+                    { label: 'Delete', onClick: () => handleDelete('single'), tone: 'danger', disabled: deleteBusy },
+                  ]
+            }
+            onCancel={() => setDeleteConfirmOpen(false)}
+            busy={deleteBusy}
+          />
+        ) : null}
+      </section>
+    )
   }
 
   return (
@@ -387,15 +547,42 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
             <button className="flex-1 rounded-3xl bg-ink px-4 py-4 font-semibold text-white" type="submit">
               Save changes
             </button>
+            <button className="rounded-3xl bg-white px-5 py-4 font-medium text-slate-700" type="button" onClick={() => setIsEditing(false)}>
+              Back
+            </button>
             <button className="rounded-3xl bg-white px-5 py-4 font-medium text-slate-700" type="button" onClick={onClose}>
               Cancel
             </button>
           </div>
 
-          <button className="w-full rounded-3xl bg-danger/10 px-4 py-4 text-sm font-semibold text-danger transition active:scale-[0.99] active:opacity-80" type="button" onClick={onDelete}>
+          <button
+            className="w-full rounded-3xl bg-danger/10 px-4 py-4 text-sm font-semibold text-danger transition duration-150 active:scale-[0.99] active:opacity-80"
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+          >
             Delete task
           </button>
         </form>
+        {deleteConfirmOpen ? (
+          <ConfirmModal
+            title={`Delete "${task.title}"?`}
+            body={(task.repeatType ?? 'none') !== 'none' ? 'Do you want to delete just this task or all future repeats?' : 'This cannot be undone.'}
+            actions={
+              (task.repeatType ?? 'none') !== 'none'
+                ? [
+                    { label: 'Cancel', onClick: () => setDeleteConfirmOpen(false), tone: 'default' },
+                    { label: 'This task only', onClick: () => handleDelete('single'), tone: 'primary', disabled: deleteBusy },
+                    { label: 'All future', onClick: () => handleDelete('future'), tone: 'danger', disabled: deleteBusy },
+                  ]
+                : [
+                    { label: 'Cancel', onClick: () => setDeleteConfirmOpen(false), tone: 'default' },
+                    { label: 'Delete', onClick: () => handleDelete('single'), tone: 'danger', disabled: deleteBusy },
+                  ]
+            }
+            onCancel={() => setDeleteConfirmOpen(false)}
+            busy={deleteBusy}
+          />
+        ) : null}
       </div>
     </section>
   )

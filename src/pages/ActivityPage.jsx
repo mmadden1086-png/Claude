@@ -85,9 +85,19 @@ export function ActivityPage({
         meta={`${stats.totalCompleted} completed - ${stats.reliability}% reliability`}
       />
 
+      <div className="flex justify-end">
+        <button
+          className="rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white"
+          type="button"
+          onClick={() => onStatsDrilldown?.({ type: 'goals', focus: 'reliability' })}
+        >
+          Improve reliability
+        </button>
+      </div>
+
       <StatsCard currentUser={currentUser} partner={partner} stats={stats} goals={goals} goalProgress={goalProgress} onDrilldown={handleDrilldown} />
 
-      <SectionCard title="Recently handled" subtitle="Small wins keep the rhythm going.">
+      <SectionCard title="Recently handled" subtitle="What should you do next? Reopen one or repeat what worked.">
         {sections?.recentlyHandled.length ? (
           sections.recentlyHandled.map((task) => (
             <ActionRow
@@ -114,7 +124,7 @@ export function ActivityPage({
         )}
       </SectionCard>
 
-      <SectionCard title="Completed timeline" subtitle="Latest completed tasks.">
+      <SectionCard title="Completed timeline" subtitle="What should you do next? Reopen or do one again.">
         {sections?.completed.length ? (
           sections.completed.map((task) => (
             <ActionRow
@@ -126,7 +136,7 @@ export function ActivityPage({
                 ...sharedActions,
                 buttons: [
                   { label: 'Reopen', tone: 'primary', onClick: (target) => onTaskAction('reopen', target) },
-                  { label: 'Schedule repeat', tone: 'default', onClick: onConvertToRepeat },
+                  { label: 'Do again', tone: 'default', onClick: (target) => onTaskAction('duplicate', target) },
                 ],
               }}
             />
@@ -141,7 +151,7 @@ export function ActivityPage({
         )}
       </SectionCard>
 
-      <SectionCard title="Date Nights" subtitle="One monthly date, plus the ideas worth repeating.">
+      <SectionCard title="Date Nights" subtitle="What should you do next? Repeat a good date or plan the next one.">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-3xl bg-canvas p-4">
             <p className="text-2xl font-semibold text-accent">{dateNightSummary.totalThisMonth}</p>
@@ -203,7 +213,7 @@ export function ActivityPage({
         )}
       </SectionCard>
 
-      <SectionCard title="Repeat cycles" subtitle="Recurring tasks advancing over time.">
+      <SectionCard title="Repeat cycles" subtitle="What should you do next? Review the next recurring task.">
         {repeatHistory?.length ? (
           repeatHistory.map((entry) => (
             <button
@@ -229,7 +239,7 @@ export function ActivityPage({
         )}
       </SectionCard>
 
-      <SectionCard title="Partner activity" subtitle={`${partner.name} added something? Keep the loop tight.`}>
+      <SectionCard title="Partner activity" subtitle={`What should you do next? Review what ${partner.name} added.`}>
         <button
           className="w-full rounded-3xl bg-canvas p-4 text-left text-sm text-slate-600 transition duration-150 active:scale-[0.99]"
           type="button"
@@ -240,7 +250,7 @@ export function ActivityPage({
         </button>
       </SectionCard>
 
-      <SectionCard title="Insights" subtitle="Patterns and friction signals.">
+      <SectionCard title="Insights" subtitle="What should you do next? Fix friction or convert repeats.">
         <div className="space-y-3 text-sm">
           <button
             className="w-full rounded-3xl bg-canvas p-4 text-left transition duration-150 active:scale-[0.99]"

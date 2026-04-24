@@ -166,7 +166,6 @@ export function StatsDrilldownModal({
   onOpenTask,
   onTaskAction,
   onOpenQuickWin,
-  onConvertToRepeat,
   onSetTasksFilter,
   onRescheduleAllMissed,
 }) {
@@ -231,9 +230,9 @@ export function StatsDrilldownModal({
                     task={task}
                     subtitle={formatLastHandled(task) ?? 'Tracked in history'}
                     primaryActionLabel="Reopen"
-                    secondaryActionLabel="Schedule repeat"
+                    secondaryActionLabel="Do again"
                     onPrimaryAction={(target) => onTaskAction?.('reopen', target)}
-                    onSecondaryAction={onConvertToRepeat}
+                    onSecondaryAction={(target) => onTaskAction?.('duplicate', target)}
                     onOpenTask={onOpenTask}
                   />
                 ))

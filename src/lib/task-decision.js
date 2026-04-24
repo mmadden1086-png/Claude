@@ -1,6 +1,6 @@
-import { addDays, differenceInCalendarDays, differenceInHours, endOfWeek, format, isSaturday, isSunday, isToday, startOfWeek, subDays } from 'date-fns'
+import { addDays, differenceInCalendarDays, differenceInHours, endOfWeek, format, isSaturday, isSunday, startOfWeek, subDays } from 'date-fns'
 import { BOTH_ASSIGNEE_ID, DEFAULT_USER_GOALS, TASK_STATUS } from './constants'
-import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from './format'
+import { getTaskStatus, isDueWithinHours, isOverdue, toDate } from './format'
 
 const EFFORT_WEIGHT = {
   Quick: 0,
@@ -10,7 +10,6 @@ const EFFORT_WEIGHT = {
 
 const DUPLICATE_SUFFIXES = new Set(['started', 'again', 'today', 'now'])
 const VAGUE_TOKENS = new Set(['stuff', 'things', 'misc', 'thing', 'items'])
-const PRIORITY_THRESHOLD = 40
 const FRICTION_BLOCK_THRESHOLD = 60
 
 function tokenizeTitle(title = '') {
@@ -161,28 +160,121 @@ export function shouldShowFrictionFix(task) {
   return getTaskFriction(task) > FRICTION_BLOCK_THRESHOLD
 }
 
-export function getPriorityScore(task, currentUserId, options = {}) {
-  const status = getTaskStatus(task)
-  if (status === TASK_STATUS.COMPLETED || task.isMissed || isSnoozed(task)) return -Infinity
+function resolveCurrentUserId(currentUser) {
+  if (!currentUser) return ''
+  if (typeof currentUser === 'string') return currentUser
+  return currentUser.id ?? currentUser.uid ?? ''
+}
+
+function isTaskExcludedFromFocus(task, now = new Date()) {
+  if (!task) return true
+  if (getTaskStatus(task) === TASK_STATUS.COMPLETED) return true
+  const snoozedUntil = toDate(task.snoozedUntil)
+  if (snoozedUntil && snoozedUntil > now) return true
+  return false
+}
+
+function isOpenTask(task, now = new Date()) {
+  return !isTaskExcludedFromFocus(task, now)
+}
+
+function sortByFocusScore(tasks, currentUser, now = new Date()) {
+  return [...tasks].sort((a, b) => {
+    const scoreDelta = getTaskPriorityScore(b, currentUser, now) - getTaskPriorityScore(a, currentUser, now)
+    if (scoreDelta !== 0) return scoreDelta
+
+    const aDue = toDate(a.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY
+    const bDue = toDate(b.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY
+    if (aDue !== bDue) return aDue - bDue
+
+    const aCreated = toDate(a.createdAt)?.getTime() ?? Number.POSITIVE_INFINITY
+    const bCreated = toDate(b.createdAt)?.getTime() ?? Number.POSITIVE_INFINITY
+    if (aCreated !== bCreated) return aCreated - bCreated
+
+    return String(a.id ?? '').localeCompare(String(b.id ?? ''))
+  })
+}
+
+export function getTaskPriorityScore(task, currentUser, now = new Date()) {
+  if (isTaskExcludedFromFocus(task, now)) return Number.NEGATIVE_INFINITY
+
+  const currentUserId = resolveCurrentUserId(currentUser)
+  const dueDate = toDate(task.dueDate)
+  const createdAt = toDate(task.createdAt)
+  const snoozedUntil = toDate(task.snoozedUntil)
+  const dueMs = dueDate?.getTime() ?? null
+  const nowMs = now.getTime()
+
+  if (snoozedUntil && snoozedUntil.getTime() > nowMs) return Number.NEGATIVE_INFINITY
 
   let score = 0
-  const assignedToMe = task.assignedTo === currentUserId || task.assignedTo === BOTH_ASSIGNEE_ID
 
-  if (isOverdue(task)) score += 90
-  if (isDueWithinHours(task, 0, 24)) score += 70
-  if (status === TASK_STATUS.IN_PROGRESS) score += 65
-  if (assignedToMe) score += 45
-  if (task.whyThisMatters?.trim()) score += 12
+  if (dueMs !== null && dueMs < nowMs) score += 100
+  else if (dueMs !== null && dueMs - nowMs <= 24 * 60 * 60 * 1000) score += 60
+
+  if (task.assignedTo === currentUserId || task.assignedTo === BOTH_ASSIGNEE_ID) score += 25
+  if (getTaskStatus(task) === TASK_STATUS.NOT_STARTED) score += 15
+  if (task.whyThisMatters?.trim()) score += 20
   if (task.effort === 'Quick') score += 10
-  if (task.effort === 'Heavy') score -= 8
-  if (task.acknowledgedAt) score += 8
-  if (isToday(toDate(task.dueDate) ?? 0)) score += 8
-  if ((task.snoozeCount ?? 0) >= 2) score += 10
-  if (taskAgeDays(task) >= 3) score += 8
-  if (options.lowEnergyMode && task.effort === 'Quick') score += 12
-  if (options.lowEnergyMode && task.effort === 'Heavy') score -= 20
+  if (createdAt && nowMs - createdAt.getTime() <= 24 * 60 * 60 * 1000) score += 5
+  if (task.startedAt || getTaskStatus(task) === TASK_STATUS.IN_PROGRESS) score += 30
 
-  return score - Math.round(getTaskFriction(task) * 0.35)
+  return Math.max(0, Math.min(100, score))
+}
+
+export function getWhyThisIsShowingLabel(task, currentUser, now = new Date()) {
+  if (!task || isTaskExcludedFromFocus(task, now)) return ''
+
+  if (toDate(task.dueDate)?.getTime() < now.getTime()) return 'Overdue'
+  if (toDate(task.dueDate) && toDate(task.dueDate).getTime() - now.getTime() <= 24 * 60 * 60 * 1000) return 'Due soon'
+  if (task.assignedTo === resolveCurrentUserId(currentUser) || task.assignedTo === BOTH_ASSIGNEE_ID) return "You're assigned"
+  if (task.effort === 'Quick') return 'Quick win'
+  return ''
+}
+
+export function getScoredOpenTasks(tasks, currentUser, options = {}) {
+  const now = options.now ?? new Date()
+  const openTasks = tasks.filter((task) => isOpenTask(task, now))
+  const lowEnergyTasks = options.lowEnergy
+    ? openTasks.filter((task) => task.effort === 'Quick')
+    : openTasks
+  const candidateTasks = lowEnergyTasks.length ? lowEnergyTasks : openTasks
+
+  return sortByFocusScore(candidateTasks, currentUser, now).map((task) => ({
+    ...task,
+    _priorityScore: getTaskPriorityScore(task, currentUser, now),
+    _surfaceReason: getWhyThisIsShowingLabel(task, currentUser, now),
+  }))
+}
+
+export function getFocusTask(tasks, currentUser, options = {}) {
+  const now = options.now ?? new Date()
+  const currentUserId = resolveCurrentUserId(currentUser)
+  const openTasks = tasks.filter((task) => !isTaskExcludedFromFocus(task, now))
+
+  if (!openTasks.length) return null
+
+  const sortedTasks = getScoredOpenTasks(openTasks, currentUserId, { now, lowEnergy: options.lowEnergy })
+  const [topTask] = sortedTasks
+
+  if (topTask && Number.isFinite(getTaskPriorityScore(topTask, currentUserId, now))) {
+    return topTask
+  }
+
+  const lowEnergyTasks = options.lowEnergy
+    ? openTasks.filter((task) => task.effort === 'Quick')
+    : openTasks
+  const candidateTasks = lowEnergyTasks.length ? lowEnergyTasks : openTasks
+  const myOpenTasks = candidateTasks.filter((task) => task.assignedTo === currentUserId || task.assignedTo === BOTH_ASSIGNEE_ID)
+  if (myOpenTasks.length) {
+    return sortByFocusScore(myOpenTasks, currentUserId, now)[0]
+  }
+
+  return sortByFocusScore(candidateTasks, currentUserId, now)[0] ?? null
+}
+
+export function getPriorityScore(task, currentUserId, options = {}) {
+  return getTaskPriorityScore(task, currentUserId, options.now ?? new Date())
 }
 
 export function deriveDoThisNextSignals(tasks, goals = DEFAULT_USER_GOALS) {
@@ -220,50 +312,6 @@ export function deriveDoThisNextSignals(tasks, goals = DEFAULT_USER_GOALS) {
     reliability,
     expectedByNow,
   }
-}
-
-function getAvoidancePenalty(task) {
-  const snoozeCount = task.snoozeCount ?? 0
-  if (snoozeCount < 2) return 0
-  return Math.min(18, snoozeCount * 6)
-}
-
-function getGoalBoost(task, signals) {
-  let boost = 0
-
-  if (signals.isBehindWeekly && task.effort === 'Quick') boost += 18
-
-  if (signals.needsDailyCompletion) {
-    if (task.effort === 'Quick') boost += 16
-    else if (task.effort === 'Medium') boost += 8
-  }
-
-  if (signals.belowReliabilityTarget && isDueWithinHours(task, 0, 24)) boost += 14
-
-  return boost
-}
-
-function getMomentumBoost(task, signals) {
-  let boost = 0
-  const status = getTaskStatus(task)
-
-  if (signals.streakActive && task.effort === 'Quick') boost += 10
-  if (status === TASK_STATUS.IN_PROGRESS) boost += 10
-  if (task.acknowledgedAt) boost += 4
-
-  return boost
-}
-
-function getDoThisNextScore(task, tasks, currentUserId, options = {}) {
-  const priorityScore = getPriorityScore(task, currentUserId, options)
-  if (!Number.isFinite(priorityScore)) return priorityScore
-
-  const signals = options.goalSignals ?? deriveDoThisNextSignals(tasks, options.goals ?? DEFAULT_USER_GOALS)
-  const goalBoost = getGoalBoost(task, signals)
-  const momentumBoost = getMomentumBoost(task, signals)
-  const avoidancePenalty = getAvoidancePenalty(task)
-
-  return priorityScore + goalBoost + momentumBoost - avoidancePenalty
 }
 
 export function getPriorityReason(task, currentUserId, options = {}, variant = 0) {
@@ -341,47 +389,49 @@ function sortByPriority(tasks, currentUserId, options = {}) {
 }
 
 export function selectDoThisNextTask(tasks, currentUserId, options = {}) {
-  const goalSignals = options.goalSignals ?? deriveDoThisNextSignals(tasks, options.goals ?? DEFAULT_USER_GOALS)
-  const activeTasks = tasks.filter(
-    (task) =>
-      getTaskStatus(task) !== TASK_STATUS.COMPLETED &&
-      !task.isMissed &&
-      !isSnoozed(task),
+  return getFocusTask(
+    tasks.filter((task) => !task.isMissed),
+    currentUserId,
+    {
+      now: options.now,
+      lowEnergy: options.lowEnergyMode,
+    },
   )
-  const meaningfulTasks = activeTasks.filter((task) => {
-    if (shouldShowFrictionFix(task)) return true
-    if (isOverdue(task)) return true
-    if (isDueWithinHours(task, 0, 24)) return true
-    if (getTaskStatus(task) === TASK_STATUS.IN_PROGRESS) return true
-    return false
-  })
-  const [topTask] = [...meaningfulTasks].sort((a, b) => {
-    const scoreDelta = getDoThisNextScore(b, tasks, currentUserId, { ...options, goalSignals }) - getDoThisNextScore(a, tasks, currentUserId, { ...options, goalSignals })
-    if (scoreDelta !== 0) return scoreDelta
-    const effortDelta = (EFFORT_WEIGHT[a.effort] ?? 9) - (EFFORT_WEIGHT[b.effort] ?? 9)
-    if (effortDelta !== 0) return effortDelta
-    return (toDate(a.dueDate)?.getTime() ?? Infinity) - (toDate(b.dueDate)?.getTime() ?? Infinity)
-  })
-  if (!topTask) return null
-  return getDoThisNextScore(topTask, tasks, currentUserId, { ...options, goalSignals }) >= PRIORITY_THRESHOLD ? topTask : null
 }
 
 export function getDraggingTasks(tasks, currentUserId, options = {}) {
-  const now = new Date()
-  return sortByPriority(
-    tasks.filter((task) => {
-      if (getTaskStatus(task) === TASK_STATUS.COMPLETED) return false
+  const now = options.now ?? new Date()
+  const excludeIds = options.excludeIds ?? new Set()
+  return getScoredOpenTasks(tasks, currentUserId, { now, lowEnergy: options.lowEnergyMode })
+    .filter((task) => {
+      if (excludeIds.has(task.id)) return false
       if (task.isMissed) return false
-      if (getTaskHealth(task) !== 'healthy') return true
-      if (isOverdue(task)) return true
-      if ((task.snoozeCount ?? 0) >= 2) return true
-      const lastTouched = toDate(task.lastActionAt ?? task.createdAt)
-      if (!lastTouched) return false
-      return differenceInHours(now, lastTouched) >= 72
-    }),
-    currentUserId,
-    options,
-  )
+      const createdAt = toDate(task.createdAt)
+      const ageHours = createdAt ? differenceInHours(now, createdAt) : 0
+      return isOverdue(task) || (ageHours > 48 && getTaskStatus(task) === TASK_STATUS.NOT_STARTED)
+    })
+    .slice(0, 3)
+}
+
+export function getUpcomingTasks(tasks, currentUserId, options = {}) {
+  const now = options.now ?? new Date()
+  const excludeIds = options.excludeIds ?? new Set()
+  return tasks
+    .filter((task) => {
+      if (excludeIds.has(task.id)) return false
+      if (!isOpenTask(task, now)) return false
+      const dueDate = toDate(task.dueDate)
+      if (!dueDate) return false
+      const dueInHours = differenceInHours(dueDate, now)
+      return dueInHours >= 0 && dueInHours <= 24 * 7
+    })
+    .sort((a, b) => (toDate(a.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY) - (toDate(b.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY))
+    .slice(0, 4)
+    .map((task) => ({
+      ...task,
+      _priorityScore: getTaskPriorityScore(task, currentUserId, now),
+      _surfaceReason: getWhyThisIsShowingLabel(task, currentUserId, now),
+    }))
 }
 
 export function getRepeatCandidates(tasks) {
@@ -406,20 +456,14 @@ export function getRepeatCandidates(tasks) {
 
 export function getQuickWins(tasks, currentUserId, options = {}) {
   const seen = new Set()
-  return sortByPriority(
-    tasks
-      .filter((task) => {
-        if (getTaskStatus(task) === TASK_STATUS.COMPLETED) return false
-        if (task.isMissed) return false
-        if (task.effort !== 'Quick') return false
-        if (getTaskHealth(task) === 'broken') return false
-        if (!toDate(task.dueDate)) return false
-        return differenceInHours(toDate(task.dueDate), new Date()) <= 48
-      }),
-    currentUserId,
-    options,
-  )
-    .filter((task) => getPriorityScore(task, currentUserId, options) >= 20)
+  const excludeIds = options.excludeIds ?? new Set()
+  return getScoredOpenTasks(tasks, currentUserId, { now: options.now, lowEnergy: false })
+    .filter((task) => {
+      if (excludeIds.has(task.id)) return false
+      if (task.isMissed) return false
+      if (task.effort !== 'Quick') return false
+      return getTaskPriorityScore(task, currentUserId, options.now ?? new Date()) > 50
+    })
     .filter((task) => {
       const key = normalizeDuplicateTitle(task.title)
       if (seen.has(key)) return false

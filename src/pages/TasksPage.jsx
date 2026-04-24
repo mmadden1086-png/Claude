@@ -1,26 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarClock, Filter, Grip, Plus, Search, X } from 'lucide-react'
+import { CalendarClock, Filter, Plus, Search, X } from 'lucide-react'
 import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { QuickAddCard } from '../components/QuickAddCard'
 import { TaskCard } from '../components/TaskCard'
 import { FILTERS, TASK_STATUS } from '../lib/constants'
 import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from '../lib/format'
+import { sortTasks } from '../lib/task-utils'
 import { PageHeader } from './PageHeader'
 
 const SEGMENTS = [
+  { id: 'all', label: 'All' },
   { id: 'today', label: 'Today' },
   { id: 'upcoming', label: 'Upcoming' },
   { id: 'backlog', label: 'Backlog' },
   { id: 'snoozed', label: 'Snoozed' },
 ]
-
-const UTILITY_SEGMENTS = [
-  { id: 'reprioritize', label: 'Reprioritize', icon: Grip },
-  { id: 'checkin', label: 'Check-In', icon: Filter },
-  { id: 'deadlines', label: 'Upcoming', icon: CalendarClock },
-]
 const TASK_UTILITIES_STORAGE_KEY = 'follow-through-tasks-utilities-open'
+const TASK_UTILITIES_DISMISSED_STORAGE_KEY = 'follow-through-tasks-utilities-dismissed'
 
 function matchesTaskSearch(task, query) {
   if (!query.trim()) return true
@@ -54,7 +51,7 @@ function isTodayBucketTask(task) {
   return false
 }
 
-function groupTasks(tasks) {
+function groupTasks(tasks, currentUserId, lowEnergyMode) {
   const activeTasks = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED)
   const snoozedTasks = activeTasks.filter((task) => isSnoozed(task))
   const unsnoozedTasks = activeTasks.filter((task) => !isSnoozed(task))
@@ -63,10 +60,11 @@ function groupTasks(tasks) {
   const backlogTasks = unsnoozedTasks.filter((task) => !todayTasks.includes(task) && !upcomingTasks.includes(task))
 
   return {
-    today: todayTasks,
-    upcoming: upcomingTasks,
-    backlog: backlogTasks,
-    snoozed: snoozedTasks,
+    all: sortTasks(activeTasks, currentUserId, lowEnergyMode),
+    today: sortTasks(todayTasks, currentUserId, lowEnergyMode),
+    upcoming: sortTasks(upcomingTasks, currentUserId, lowEnergyMode),
+    backlog: sortTasks(backlogTasks, currentUserId, lowEnergyMode),
+    snoozed: sortTasks(snoozedTasks, currentUserId, lowEnergyMode),
   }
 }
 
@@ -95,22 +93,28 @@ export function TasksPage({
   quickAddExpanded,
   setQuickAddExpanded,
   onQuickAdd,
-  onKeepTopThree,
-  onSimplifyList,
   onTaskAction,
   onOpenTask,
   taskMotionState,
   onWeeklyReassign,
 }) {
-  const [activeSegment, setActiveSegment] = useState('today')
-  const [utilitySegment, setUtilitySegment] = useState('reprioritize')
+  const [activeSegment, setActiveSegment] = useState('all')
+  const [quickActionMode, setQuickActionMode] = useState('normal')
   const [utilitiesOpen, setUtilitiesOpen] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(TASK_UTILITIES_STORAGE_KEY) === 'true'
   })
+  const [utilitiesDismissed, setUtilitiesDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(TASK_UTILITIES_DISMISSED_STORAGE_KEY) === 'true'
+  })
   const [searchQuery, setSearchQuery] = useState('')
-  const groupedTasks = useMemo(() => groupTasks(filteredTasks), [filteredTasks])
-  const upcomingTasks = useMemo(() => upcomingSevenDays(filteredTasks), [filteredTasks])
+  const groupedTasks = useMemo(() => groupTasks(filteredTasks, currentUser.id, false), [currentUser.id, filteredTasks])
+  const upcomingTasks = useMemo(() => sections?.dueSoonTasks?.length ? sections.dueSoonTasks : upcomingSevenDays(filteredTasks), [filteredTasks, sections])
+  const allVisibleTasks = useMemo(
+    () => (groupedTasks.all ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
+    [groupedTasks.all, searchQuery],
+  )
   const visibleTasks = useMemo(
     () => (groupedTasks[activeSegment] ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
     [activeSegment, groupedTasks, searchQuery],
@@ -125,6 +129,28 @@ export function TasksPage({
   )
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const draggingCount = visibleDraggingTasks.length
+  const shouldAutoExpandUtilities = draggingCount > 0 || filteredTasks.some((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED)
+  const utilitiesVisible = utilitiesOpen || (shouldAutoExpandUtilities && !utilitiesDismissed)
+  const utilitiesSummaryLabel = draggingCount > 0
+    ? `${draggingCount} need attention`
+    : `${visibleUpcomingTasks.length} coming up`
+  const renderedUtilityIds = useMemo(() => {
+    if (!utilitiesVisible) return new Set()
+    return new Set([...visibleDraggingTasks.map((task) => task.id), ...visibleUpcomingTasks.map((task) => task.id)])
+  }, [utilitiesVisible, visibleDraggingTasks, visibleUpcomingTasks])
+  const dedupedVisibleTasks = useMemo(
+    () => visibleTasks.filter((task) => !renderedUtilityIds.has(task.id)),
+    [renderedUtilityIds, visibleTasks],
+  )
+  const dedupedAllVisibleTasks = useMemo(
+    () => allVisibleTasks.filter((task) => !renderedUtilityIds.has(task.id)),
+    [allVisibleTasks, renderedUtilityIds],
+  )
+  const displayTasks = useMemo(() => {
+    if (quickActionMode === 'top3') return dedupedAllVisibleTasks.slice(0, 3)
+    if (quickActionMode === 'simplify') return dedupedAllVisibleTasks.slice(0, 1)
+    return dedupedVisibleTasks
+  }, [dedupedAllVisibleTasks, dedupedVisibleTasks, quickActionMode])
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -132,11 +158,17 @@ export function TasksPage({
     return undefined
   }, [utilitiesOpen])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    window.localStorage.setItem(TASK_UTILITIES_DISMISSED_STORAGE_KEY, String(utilitiesDismissed))
+    return undefined
+  }, [utilitiesDismissed])
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Tasks"
-        body="Open the right bucket, then tap a task for details."
+        body="Browse everything or jump into one bucket."
         meta={`${activeCount} active asks`}
         actions={
           <div className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600">
@@ -155,23 +187,16 @@ export function TasksPage({
         }
       />
 
-      <button
-        className="flex w-full items-center gap-3 rounded-4xl border border-sand bg-white/95 px-4 py-4 text-left text-slate-500 shadow-sm"
-        type="button"
-        onClick={() => setQuickAddExpanded(true)}
-      >
-        <Search size={18} />
-        <span className="flex-1">What needs follow-through?</span>
-        <span className="rounded-full bg-accentSoft px-3 py-1 text-sm font-semibold text-accent">Add</span>
-      </button>
-
       <label className="flex items-center gap-3 rounded-4xl border border-sand bg-white/95 px-4 py-3 text-slate-500 shadow-sm">
         <Search size={16} />
         <input
           className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-slate-400"
           type="search"
-          placeholder="Search tasks"
+          placeholder="Add or find a task"
           value={searchQuery}
+          onFocus={() => {
+            if (!searchQuery.trim()) setQuickAddExpanded(true)
+          }}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
         {searchQuery ? (
@@ -181,7 +206,7 @@ export function TasksPage({
         ) : null}
       </label>
 
-      <div className="grid grid-cols-4 gap-1 rounded-3xl bg-white p-1 shadow-sm">
+      <div className="grid grid-cols-5 gap-1 rounded-3xl bg-white p-1 shadow-sm">
         {SEGMENTS.map((segment) => (
           <button
             key={segment.id}
@@ -194,64 +219,67 @@ export function TasksPage({
         ))}
       </div>
 
-      <SectionCard title="Utilities" subtitle="Quick planning without leaving the list.">
+      <SectionCard title="Quick actions" subtitle="Use these only when you need them.">
         <button
           className="flex w-full items-center justify-between rounded-3xl bg-white px-4 py-3 text-left text-sm font-medium text-slate-700"
           type="button"
-          onClick={() => setUtilitiesOpen((current) => !current)}
+          onClick={() => {
+            if (utilitiesVisible) {
+              setUtilitiesOpen(false)
+              setUtilitiesDismissed(true)
+              return
+            }
+            setUtilitiesOpen(true)
+            setUtilitiesDismissed(false)
+          }}
         >
-          <span>{utilitiesOpen ? 'Hide utilities' : 'Show utilities'}</span>
-          <span className="text-xs text-slate-500">{draggingCount ? `${draggingCount} need attention` : `${visibleUpcomingTasks.length} upcoming`}</span>
+          <span>{utilitiesVisible ? 'Hide quick actions' : utilitiesSummaryLabel}</span>
+          <span className="text-xs text-slate-500">{utilitiesSummaryLabel}</span>
         </button>
 
-        {utilitiesOpen ? (
+        {utilitiesVisible ? (
           <>
-            <div className="grid grid-cols-3 gap-1 rounded-3xl bg-white p-1 shadow-sm">
-              {UTILITY_SEGMENTS.map((segment) => {
-                const Icon = segment.icon
-                return (
-                  <button
-                    key={segment.id}
-                    className={`rounded-2xl px-2 py-3 text-xs font-semibold transition ${utilitySegment === segment.id ? 'bg-accent text-white' : 'text-slate-600'}`}
-                    type="button"
-                    onClick={() => setUtilitySegment(segment.id)}
-                  >
-                    <span className="flex items-center justify-center gap-1">
-                      <Icon size={14} />
-                      {segment.label}
-                    </span>
-                  </button>
-                )
-              })}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                className={`rounded-3xl px-4 py-4 text-left text-sm font-semibold ${quickActionMode === 'top3' ? 'bg-accent text-white' : 'bg-white text-slate-700'}`}
+                type="button"
+                onClick={() => setQuickActionMode((current) => (current === 'top3' ? 'normal' : 'top3'))}
+              >
+                {quickActionMode === 'top3' ? 'Turn off top 3' : 'Keep top 3'}
+              </button>
+              <button
+                className={`rounded-3xl px-4 py-4 text-left text-sm font-semibold ${quickActionMode === 'simplify' ? 'bg-accent text-white' : 'bg-white text-slate-700'}`}
+                type="button"
+                onClick={() => setQuickActionMode((current) => (current === 'simplify' ? 'normal' : 'simplify'))}
+              >
+                {quickActionMode === 'simplify' ? 'Turn off simplify list' : 'Simplify list'}
+              </button>
             </div>
 
-            {utilitySegment === 'reprioritize' ? (
-              <div className="grid grid-cols-2 gap-2">
-                <button className="rounded-3xl bg-white px-4 py-4 text-left text-sm font-semibold text-slate-700" type="button" onClick={onKeepTopThree}>
-                  Keep top 3
-                </button>
-                <button className="rounded-3xl bg-white px-4 py-4 text-left text-sm font-semibold text-slate-700" type="button" onClick={onSimplifyList}>
-                  Simplify list
-                </button>
-              </div>
-            ) : null}
-
-            {utilitySegment === 'checkin' ? (
-              visibleDraggingTasks.length ? (
+            <div className="space-y-3">
+              <div className="rounded-3xl bg-white p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Check-in</p>
+                    <p className="text-xs text-slate-500">Fix the tasks that are dragging.</p>
+                  </div>
+                  <span className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600">{draggingCount}</span>
+                </div>
+              {visibleDraggingTasks.length ? (
                 <div className="space-y-3">
                   {visibleDraggingTasks.slice(0, 2).map((task) => (
-                    <div key={task.id} className="rounded-3xl bg-white p-3">
+                    <div key={task.id} className="rounded-3xl bg-canvas p-3">
                       <button className="text-left font-medium text-ink" type="button" onClick={() => onOpenTask(task.id)}>
                         {task.title}
                       </button>
                       <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                        <button className="rounded-2xl bg-canvas px-3 py-2 text-slate-600" type="button" onClick={() => onTaskAction('reschedule', task)}>
+                        <button className="rounded-2xl bg-white px-3 py-2 text-slate-600" type="button" onClick={() => onTaskAction('reschedule', task)}>
                           Reschedule
                         </button>
-                        <button className="rounded-2xl bg-canvas px-3 py-2 text-slate-600" type="button" onClick={() => onTaskAction('remove', task)}>
+                        <button className="rounded-2xl bg-white px-3 py-2 text-slate-600" type="button" onClick={() => onTaskAction('remove', task)}>
                           Remove
                         </button>
-                        <button className="rounded-2xl bg-canvas px-3 py-2 text-slate-600" type="button" onClick={() => onWeeklyReassign(task)}>
+                        <button className="rounded-2xl bg-white px-3 py-2 text-slate-600" type="button" onClick={() => onWeeklyReassign(task)}>
                           Reassign
                         </button>
                       </div>
@@ -259,12 +287,22 @@ export function TasksPage({
                   ))}
                 </div>
               ) : (
-                <div className="rounded-3xl bg-white px-4 py-4 text-sm text-slate-500">Nothing is dragging right now.</div>
-              )
-            ) : null}
+                <div className="rounded-3xl bg-canvas px-4 py-4 text-sm text-slate-500">Nothing is dragging right now.</div>
+              )}
+              </div>
 
-            {utilitySegment === 'deadlines' ? (
-              visibleUpcomingTasks.length ? (
+              <div className="rounded-3xl bg-white p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <CalendarClock size={16} className="text-slate-500" />
+                    <div>
+                      <p className="text-sm font-semibold text-ink">Upcoming deadlines</p>
+                      <p className="text-xs text-slate-500">Due in the next 7 days.</p>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600">{visibleUpcomingTasks.length}</span>
+                </div>
+              {visibleUpcomingTasks.length ? (
                 <div className="space-y-3">
                   {visibleUpcomingTasks.slice(0, 2).map((task) => (
                     <TaskCard
@@ -280,18 +318,19 @@ export function TasksPage({
                   ))}
                 </div>
               ) : (
-                <div className="rounded-3xl bg-white px-4 py-4 text-sm text-slate-500">
+                <div className="rounded-3xl bg-canvas px-4 py-4 text-sm text-slate-500">
                   {searchQuery ? 'No upcoming matches.' : 'No deadlines in the next 7 days.'}
                 </div>
-              )
-            ) : null}
+              )}
+              </div>
+            </div>
           </>
         ) : null}
       </SectionCard>
 
       <section className="space-y-3">
-        {visibleTasks.length ? (
-          visibleTasks.map((task) => (
+        {displayTasks.length ? (
+          displayTasks.map((task) => (
             <TaskCard
               key={task.id}
               task={task}
@@ -305,7 +344,22 @@ export function TasksPage({
           ))
         ) : (
           <div className="rounded-4xl border border-white/70 bg-panel/95 p-5 text-sm text-slate-500 shadow-card">
-            <p>{searchQuery ? 'No matching tasks.' : `Nothing in ${SEGMENTS.find((segment) => segment.id === activeSegment)?.label.toLowerCase()} right now.`}</p>
+            <p>
+              {searchQuery
+                ? 'No matching tasks.'
+                : quickActionMode !== 'normal'
+                  ? 'No tasks match this quick action view.'
+                  : `Nothing in ${SEGMENTS.find((segment) => segment.id === activeSegment)?.label.toLowerCase()} right now.`}
+            </p>
+            {quickActionMode !== 'normal' ? (
+              <button
+                className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                type="button"
+                onClick={() => setQuickActionMode('normal')}
+              >
+                Return to normal view
+              </button>
+            ) : null}
             <button
               className="mt-3 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white"
               type="button"

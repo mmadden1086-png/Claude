@@ -2,7 +2,7 @@ import { Check, ChevronRight, Clock3, Play } from 'lucide-react'
 import { clsx } from 'clsx'
 import { TASK_STATUS } from '../lib/constants'
 import { describeRepeat, formatDueContext, formatStatusLabel, getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, nextRepeatLabel } from '../lib/format'
-import { getFrictionFix, getPriorityReason, shouldShowFrictionFix } from '../lib/task-decision'
+import { shouldShowFrictionFix } from '../lib/task-decision'
 import { getWhyDisplayDecision } from '../lib/why-strength'
 
 function getTaskFlags(task) {
@@ -29,20 +29,19 @@ function firstLine(value) {
 }
 
 function shortImpactMessage(task, currentUser) {
-  const frictionBlocked = shouldShowFrictionFix(task)
-  const priorityReason = frictionBlocked
-    ? getFrictionFix(task)
-    : getPriorityReason(task, currentUser.id, {}, task.id?.length ?? 0)
   const whyDecision = getWhyDisplayDecision(task, task.whyThisMatters, currentUser.id)
-  const impact = firstLine(priorityReason) || firstLine(whyDecision.text)
+  const impact = firstLine(whyDecision.text)
 
   if (!impact && getTaskStatus(task) === TASK_STATUS.COMPLETED) return 'Completed and logged'
-  if (!impact) return 'Good next step to keep things moving'
+  if (!impact) return 'Needs attention soon'
   return impact.length > 96 ? `${impact.slice(0, 93).trim()}...` : impact
 }
 
 function listTags(task) {
+  const surfaceReason = task._surfaceReason ? { label: task._surfaceReason, tone: 'accent' } : null
   const flagTags = getTaskFlags(task)
+  if (surfaceReason && flagTags.length) return [surfaceReason, ...flagTags].slice(0, 2)
+  if (surfaceReason) return [surfaceReason]
   if (flagTags.length) return flagTags.slice(0, 2)
 
   return [
@@ -80,6 +79,10 @@ export function TaskCard({
   const repeatNextText = nextRepeatLabel(task)
 
   function handleCardClick() {
+    if (isFocus && status === TASK_STATUS.NOT_STARTED) {
+      onAction?.('start', task, { source: 'focus' })
+      return
+    }
     if (!interactive) return
     onOpen(task.id)
   }
@@ -103,7 +106,6 @@ export function TaskCard({
         )}
         onClick={handleCardClick}
         onKeyDown={(event) => {
-          if (!interactive) return
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
             handleCardClick()
@@ -186,13 +188,6 @@ export function TaskCard({
           <div className="rounded-3xl bg-canvas px-4 py-3 text-sm text-slate-700">
             <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Original task</p>
             <p>{referenceTitle}</p>
-          </div>
-        ) : null}
-
-        {repeatText || repeatNextText ? (
-          <div className="rounded-3xl bg-canvas px-4 py-3 text-sm text-slate-700">
-            <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Repeat</p>
-            <p>{[repeatText, repeatNextText].filter(Boolean).join(' - ')}</p>
           </div>
         ) : null}
 

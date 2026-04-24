@@ -32,7 +32,7 @@ import { logout } from './lib/firestore'
 import { useAuthSession } from './hooks/use-auth'
 import { useNotifications } from './hooks/use-notifications'
 import { useSharedData } from './hooks/use-shared-data'
-import { appendHistory, computeStats, createTaskPayload, deriveSections, getBannerMessage, getPointsForTask } from './lib/task-utils'
+import { appendHistory, computeStats, createTaskPayload, deriveSections, getBannerMessage, getPointsForTask, sortTasks } from './lib/task-utils'
 import { detectDuplicateTask, getSmartRetryDate } from './lib/task-decision'
 import { advanceRepeatingTask, shouldAdvanceRepeat } from './lib/task-state'
 
@@ -226,8 +226,6 @@ function App() {
   const [customDate, setCustomDate] = useState('')
   const [statsView, setStatsView] = useState(null)
   const [duplicatePrompt, setDuplicatePrompt] = useState(null)
-  const [deletePrompt, setDeletePrompt] = useState(null)
-  const [deleteBusy, setDeleteBusy] = useState(false)
   const [goalEditor, setGoalEditor] = useState(null)
   const [goalSaveBusy, setGoalSaveBusy] = useState(false)
   const [dateIdeaModalOpen, setDateIdeaModalOpen] = useState(false)
@@ -754,10 +752,10 @@ function App() {
       return
     }
 
-    if (action === 'reopen') {
-      await runWithTaskMotion(task.id, 'pulse', () => runTaskMutation('reopen', task, async () => {
-        await actions.updateTask(task.id, {
-          status: TASK_STATUS.NOT_STARTED,
+      if (action === 'reopen') {
+        await runWithTaskMotion(task.id, 'pulse', () => runTaskMutation('reopen', task, async () => {
+          await actions.updateTask(task.id, {
+            status: TASK_STATUS.NOT_STARTED,
           isCompleted: false,
           completedAt: null,
           isMissed: false,
@@ -768,13 +766,56 @@ function App() {
           history: appendHistory(task, 'reopened', currentUser.id),
         })
         addToast(`Reopened. What's left?`, async () => restoreSnapshot(task.id, snapshot))
-      }))
-      return
-    }
+        }))
+        return
+      }
 
-    if (action === 'remove') {
-      await runWithTaskMotion(task.id, 'exit', () => runTaskMutation('remove', task, async () => {
-        await actions.updateTask(task.id, {
+      if (action === 'duplicate') {
+        const duplicateDueDate = toDate(sourceTask.dueDate)
+        const nextDueDate = duplicateDueDate && duplicateDueDate.getTime() > new Date(now).getTime()
+          ? duplicateDueDate.toISOString()
+          : now
+
+        await actions.createTask({
+          clientRequestId: crypto.randomUUID(),
+          title: sourceTask.title,
+          notes: sourceTask.notes ?? '',
+          assignedTo: sourceTask.assignedTo ?? currentUser.id,
+          requestedBy: currentUser.id,
+          dueDate: nextDueDate,
+          dueTime: sourceTask.dueTime ?? '',
+          urgency: sourceTask.urgency ?? 'Whenever',
+          effort: sourceTask.effort ?? 'Quick',
+          category: sourceTask.category ?? 'Home',
+          clarity: sourceTask.clarity ?? '',
+          whyThisMatters: sourceTask.whyThisMatters ?? '',
+          repeatType: 'none',
+          repeatDays: [],
+          status: TASK_STATUS.NOT_STARTED,
+          createdAt: now,
+          completedAt: null,
+          snoozedUntil: null,
+          isCompleted: false,
+          isMissed: false,
+          acknowledgedAt: null,
+          lastActionAt: now,
+          snoozeCount: 0,
+          repeatPausedAt: null,
+          nextOccurrenceAt: null,
+          startedAt: null,
+          inProgress: false,
+          history: [{ type: 'duplicated', at: now, by: currentUser.id, fromTaskId: sourceTask.id }],
+          reopenedFromTaskId: null,
+          trackedMinutes: 0,
+          dateIdeaId: sourceTask.dateIdeaId ?? null,
+        })
+        addToast('Task duplicated', null)
+        return
+      }
+
+      if (action === 'remove') {
+        await runWithTaskMotion(task.id, 'exit', () => runTaskMutation('remove', task, async () => {
+          await actions.updateTask(task.id, {
           isMissed: true,
           inProgress: false,
           startedAt: null,
@@ -873,9 +914,13 @@ function App() {
 
   async function handleKeepTopThree() {
     if (!currentUser) return
-    const toPush = filteredTasks
-      .filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && task.id !== sections?.topTask?.id)
-      .slice(3)
+    const rankedOpenTasks = sortTasks(
+      filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && !task.isMissed && !task.snoozedUntil),
+      currentUser.id,
+      lowEnergyMode,
+    )
+    const keepIds = new Set(rankedOpenTasks.slice(0, 3).map((task) => task.id))
+    const toPush = rankedOpenTasks.filter((task) => !keepIds.has(task.id))
 
     await Promise.all(
       toPush.map((task) =>
@@ -889,8 +934,24 @@ function App() {
   }
 
   async function handleSimplifyList() {
-    setLowEnergyMode(true)
-    addToast('Low Energy Mode is on. Quick tasks are leading now.', null)
+    if (!currentUser) return
+    const rankedOpenTasks = sortTasks(
+      filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && !task.isMissed && !task.snoozedUntil),
+      currentUser.id,
+      lowEnergyMode,
+    )
+    const keepIds = new Set(rankedOpenTasks.slice(0, 1).map((task) => task.id))
+    const toPush = rankedOpenTasks.filter((task) => !keepIds.has(task.id))
+
+    await Promise.all(
+      toPush.map((task) =>
+        actions.updateTask(task.id, {
+          urgency: 'Whenever',
+          history: appendHistory(task, 'simplify-list', currentUser.id),
+        }),
+      ),
+    )
+    addToast('Kept one task in front and moved the rest to backlog', null)
   }
 
   async function handleWeeklyReassign(task) {
@@ -995,27 +1056,16 @@ function App() {
     }
   }
 
-  function openDeletePrompt(task) {
-    const futureRepeats = (task.repeatType ?? 'none') !== 'none' ? getRelatedFutureRepeats(task, tasks) : []
-    setDeletePrompt({
-      task,
-      futureRepeats,
-      mode: futureRepeats.length ? 'repeat' : 'single',
-    })
-  }
-
   async function restoreDeletedTasks(snapshots) {
     await Promise.all(snapshots.map((snapshot) => actions.restoreTask(snapshot.id, snapshot)))
   }
 
-  async function handleDeleteTask(scope = 'single') {
-    if (!deletePrompt || deleteBusy) return
-
-    const targets = scope === 'future' ? [deletePrompt.task, ...deletePrompt.futureRepeats] : [deletePrompt.task]
+  async function handleDeleteTask(task, scope = 'single') {
+    if (!task) return
+    const futureRepeats = scope === 'future' && (task.repeatType ?? 'none') !== 'none' ? getRelatedFutureRepeats(task, tasks) : []
+    const targets = scope === 'future' ? [task, ...futureRepeats] : [task]
     const snapshots = targets.map((item) => ({ ...item }))
 
-    setDeleteBusy(true)
-    setDeletePrompt(null)
     setOpenTaskId(null)
 
     if (targets.some((item) => item.id === startModeTaskId)) {
@@ -1023,21 +1073,17 @@ function App() {
       setStartTimerSeconds(0)
     }
 
-    try {
-      targets.forEach((task) => setTaskMotionState(task.id, 'exit'))
-      await delay(TASK_MOTION_DURATION)
-      await Promise.all(
-        targets.map((task) =>
-          runTaskMutation(`delete:${scope}`, task, async () => {
-            await actions.deleteTask(task.id)
-          }),
-        ),
-      )
+    targets.forEach((item) => setTaskMotionState(item.id, 'exit'))
+    await delay(TASK_MOTION_DURATION)
+    await Promise.all(
+      targets.map((item) =>
+        runTaskMutation(`delete:${scope}`, item, async () => {
+          await actions.deleteTask(item.id)
+        }),
+      ),
+    )
 
-      addToast(scope === 'future' ? 'Task series deleted' : 'Task deleted', async () => restoreDeletedTasks(snapshots))
-    } finally {
-      setDeleteBusy(false)
-    }
+    addToast(scope === 'future' ? 'Task deleted' : 'Task deleted', async () => restoreDeletedTasks(snapshots))
   }
 
   async function handleDuplicateUpdateExisting() {
@@ -1200,7 +1246,7 @@ function App() {
           tasks={tasks}
           onClose={() => setOpenTaskId(null)}
           onSave={(updates) => handleTaskSave(openTask.id, updates)}
-          onDelete={() => openDeletePrompt(openTask)}
+          onDelete={({ scope } = {}) => handleDeleteTask(openTask, scope ?? 'single')}
         />
       ) : null}
 
@@ -1262,31 +1308,6 @@ function App() {
           onUpdateExisting={handleDuplicateUpdateExisting}
           onKeepBoth={handleDuplicateKeepBoth}
           onCancel={() => setDuplicatePrompt(null)}
-        />
-      ) : null}
-
-      {deletePrompt ? (
-        <ConfirmModal
-          title={deletePrompt.mode === 'repeat' ? 'Delete this task?' : `Delete "${deletePrompt.task.title}"?`}
-          body={
-            deletePrompt.mode === 'repeat'
-              ? 'Do you want to delete just this task or all future repeats?'
-              : 'This action cannot be undone.'
-          }
-          actions={
-            deletePrompt.mode === 'repeat'
-              ? [
-                  { label: 'This task only', onClick: () => handleDeleteTask('single'), tone: 'danger' },
-                  { label: 'All future', onClick: () => handleDeleteTask('future'), tone: 'primary' },
-                  { label: 'Cancel', onClick: () => setDeletePrompt(null), tone: 'default' },
-                ]
-              : [
-                  { label: 'Cancel', onClick: () => setDeletePrompt(null), tone: 'default' },
-                  { label: 'Delete', onClick: () => handleDeleteTask('single'), tone: 'danger' },
-                ]
-          }
-          onCancel={() => setDeletePrompt(null)}
-          busy={deleteBusy}
         />
       ) : null}
 

@@ -15,8 +15,8 @@ import {
   REPEAT_SUGGESTIONS,
   TASK_STATUS,
 } from './constants'
-import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from './format'
-import { createBreakdownTask, deriveDoThisNextSignals, getDoThisNextMessage, getDraggingTasks, getPriorityScore, getQuickWins, getRepeatCandidates, getTaskHealth, selectDoThisNextTask } from './task-decision'
+import { getTaskStatus, isOverdue, isSnoozed, toDate } from './format'
+import { createBreakdownTask, deriveDoThisNextSignals, getDoThisNextMessage, getDraggingTasks, getPriorityScore, getQuickWins, getRepeatCandidates, getScoredOpenTasks, getTaskHealth, getUpcomingTasks, selectDoThisNextTask } from './task-decision'
 import { computeNextRepeatDate } from './task-state'
 
 export function inferClarity(title, existingClarity) {
@@ -122,7 +122,7 @@ export function deriveSections(tasks, currentUserId, lowEnergyMode, goals) {
   const missed = tasks.filter((task) => task.isMissed)
   const now = new Date()
 
-  const sorted = sortTasks(active, currentUserId, lowEnergyMode)
+  const sorted = getScoredOpenTasks(active, currentUserId, { now, lowEnergy: lowEnergyMode })
   const unsnoozed = sorted.filter((task) => !isSnoozed(task))
   const visibleActive = lowEnergyMode ? unsnoozed.filter((task) => task.effort !== 'Heavy') : unsnoozed
   const recentlyHandled = completed
@@ -132,22 +132,32 @@ export function deriveSections(tasks, currentUserId, lowEnergyMode, goals) {
   const goalSignals = deriveDoThisNextSignals(tasks, goals)
   const doThisNext = selectDoThisNextTask(tasks, currentUserId, { lowEnergyMode, goals, goalSignals })
   const focusTask = doThisNext ? createBreakdownTask(doThisNext) ?? doThisNext : null
-  const draggingTasks = getDraggingTasks(tasks, currentUserId, { lowEnergyMode })
+  const renderedTaskIds = new Set()
+  if (doThisNext?.id) renderedTaskIds.add(doThisNext.id)
+  if (focusTask?.parentTaskId) renderedTaskIds.add(focusTask.parentTaskId)
+  if (focusTask?.id && !String(focusTask.id).startsWith('breakdown:')) renderedTaskIds.add(focusTask.id)
+
+  const draggingTasks = getDraggingTasks(tasks, currentUserId, { lowEnergyMode, now, excludeIds: renderedTaskIds })
+  draggingTasks.forEach((task) => renderedTaskIds.add(task.id))
+  const upcomingTasks = getUpcomingTasks(tasks, currentUserId, { now, excludeIds: renderedTaskIds })
+  upcomingTasks.forEach((task) => renderedTaskIds.add(task.id))
   const repeatSuggestions = getRepeatCandidates(tasks)
-  const quickWinTasks = getQuickWins(tasks, currentUserId, { lowEnergyMode })
+  const quickWinTasks = getQuickWins(tasks, currentUserId, { lowEnergyMode, now, excludeIds: renderedTaskIds })
+  quickWinTasks.forEach((task) => renderedTaskIds.add(task.id))
+  const openTasks = visibleActive.filter((task) => !renderedTaskIds.has(task.id)).slice(0, 12)
 
   return {
     topTask: doThisNext,
     focusTask,
     topTaskMessage: doThisNext ? getDoThisNextMessage(doThisNext, tasks, currentUserId, { lowEnergyMode, goals, goalSignals }) : '',
     needsAttention: visibleActive.filter((task) => isOverdue(task) || shouldShowExpectationCheck(task) || getTaskHealth(task) === 'broken').slice(0, 6),
-    openTasks: visibleActive.filter((task) => !isSnoozed(task) && !isOverdue(task) && !isDueWithinHours(task, 0, 4)).slice(0, 12),
+    openTasks,
     futureTasks: visibleActive.filter((task) => {
       const dueDate = toDate(task.dueDate)
       return dueDate ? differenceInCalendarDays(dueDate, now) > 14 : false
     }),
     snoozedTasks: active.filter((task) => isSnoozed(task)),
-    dueSoonTasks: visibleActive.filter((task) => isDueWithinHours(task, 0, 4)),
+    dueSoonTasks: upcomingTasks,
     recentlyHandled,
     missed,
     completed: completed
@@ -157,6 +167,7 @@ export function deriveSections(tasks, currentUserId, lowEnergyMode, goals) {
     draggingTasks: draggingTasks.slice(0, 6),
     repeatSuggestions: repeatSuggestions.slice(0, 4),
     quickWinTasks,
+    renderedTaskIds,
   }
 }
 

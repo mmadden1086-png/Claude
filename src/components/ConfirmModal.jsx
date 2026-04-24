@@ -1,17 +1,22 @@
 export function ConfirmModal({ title, body, actions, onCancel, busy = false }) {
-  const resolvedActions = actions?.length
+  const resolvedActions = (actions?.length
     ? actions
     : [
         { label: 'Cancel', onClick: onCancel, tone: 'default' },
         { label: 'Confirm', onClick: onCancel, tone: 'danger' },
-      ]
+      ])
+    .slice()
+    .sort((a, b) => {
+      const rank = { default: 0, primary: 1, danger: 2 }
+      return (rank[a.tone] ?? 1) - (rank[b.tone] ?? 1)
+    })
 
   return (
     <section className="fixed inset-0 z-50 bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={busy ? undefined : onCancel}>
       <div className="mx-auto max-w-md rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
         <h2 className="text-xl font-semibold text-ink">{title}</h2>
-        <p className="mt-2 text-sm text-slate-600">{body}</p>
-        <div className="mt-5 space-y-2">
+        {body ? <p className="mt-3 text-base leading-relaxed text-slate-700">{body}</p> : null}
+        <div className="mt-6 space-y-3">
           {resolvedActions.map((action) => (
             <button
               key={action.label}
@@ -21,7 +26,7 @@ export function ConfirmModal({ title, body, actions, onCancel, busy = false }) {
                   : action.tone === 'primary'
                     ? 'bg-accent text-white'
                     : 'bg-white text-slate-700'
-              } ${busy || action.disabled ? 'opacity-60' : ''}`}
+              } ${busy || action.disabled ? 'opacity-60' : 'active:opacity-90'} duration-150`}
               type="button"
               disabled={busy || action.disabled}
               onClick={action.onClick}

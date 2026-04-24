@@ -90,7 +90,7 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
 
       <SectionCard
         title="Generate a date"
-        subtitle="Get up to three solid options, or let the app decide."
+        subtitle="Get up to three solid options fast."
         action={(
           <button className="rounded-full bg-white px-3 py-2 text-sm text-slate-600" type="button" onClick={onOpenDateIdeaModal}>
             Add idea
@@ -130,33 +130,19 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
           </select>
         </div>
 
-        <button
-          className="w-full rounded-3xl bg-accent px-4 py-4 text-sm font-semibold text-white"
-          type="button"
-          onClick={() => pickedForUs && onSelectDateIdea(pickedForUs.idea)}
-          disabled={!pickedForUs}
-        >
-          Pick for us
-        </button>
-
         <div className="space-y-3">
           {dateSuggestions.length ? (
             dateSuggestions.map((entry, index) => (
               <div key={entry.idea.id} className={`rounded-3xl bg-white p-4 ${index === 0 ? 'ring-1 ring-accent/20' : ''}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-ink">{entry.idea.title}</p>
-                    <p className="mt-1 text-sm text-slate-600">{entry.idea.description || 'Simple idea ready when you are.'}</p>
-                    <p className="mt-2 text-xs text-slate-500">{[entry.idea.category, entry.idea.budgetLevel, entry.idea.duration].filter(Boolean).join(' - ')}</p>
-                    <p className="mt-2 text-sm text-slate-600">{entry.whyFits}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {index === 0 ? <p className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">Best choice</p> : null}
-                      {entry.label ? <p className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent">{entry.label}</p> : null}
-                    </div>
+                <div>
+                  <p className="font-medium text-ink">{entry.idea.title}</p>
+                  <p className="mt-1 text-sm text-slate-600">{entry.idea.description || 'Simple idea ready when you are.'}</p>
+                  <p className="mt-2 text-xs text-slate-500">{[entry.idea.category, entry.idea.budgetLevel, entry.idea.duration].filter(Boolean).join(' - ')}</p>
+                  <p className="mt-2 text-sm text-slate-600">{entry.whyFits}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {index === 0 ? <p className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">Best choice</p> : null}
+                    {entry.label ? <p className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent">{entry.label}</p> : null}
                   </div>
-                  <span className="rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent">
-                    {Math.max(0, entry.score)}
-                  </span>
                 </div>
                 <button className="mt-3 rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-white" type="button" onClick={() => onSelectDateIdea(entry.idea)}>
                   Choose this
@@ -227,7 +213,7 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
                   ))}
                 </div>
                 <button className="mt-3 rounded-2xl bg-white px-3 py-2 text-sm font-medium text-slate-700" type="button" onClick={() => onSelectDateIdea(idea)}>
-                  Use this idea
+                  Choose this
                 </button>
               </div>
             ))

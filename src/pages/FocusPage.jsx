@@ -23,6 +23,7 @@ export function FocusPage({
   onOpenDateNight,
   onTaskAction,
   onOpenTask,
+  setQuickAddExpanded,
   taskMotionState,
 }) {
   const topTask = sections?.topTask ?? null
@@ -54,24 +55,42 @@ export function FocusPage({
 
   if (!focusTask) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="rounded-[2rem] border border-white/70 bg-panel/95 p-6 shadow-card">
-          <h1 className="text-2xl font-semibold text-ink">Nothing needs focus right now.</h1>
-          <p className="mt-2 text-sm text-slate-600">If something new shows up, add it from Tasks.</p>
+          <h1 className="text-2xl font-semibold text-ink">No tasks right now</h1>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <button className="rounded-2xl bg-accent px-4 py-4 text-sm font-semibold text-white" type="button" onClick={() => setQuickAddExpanded?.(true)}>
+              Add task
+            </button>
+            <button
+              className="rounded-2xl bg-white px-4 py-4 text-sm font-semibold text-slate-700"
+              type="button"
+              onClick={() => {
+                const fallbackQuickWin = sections?.quickWinTasks?.[0]
+                if (fallbackQuickWin) {
+                  onOpenTask(fallbackQuickWin.id)
+                  return
+                }
+                setQuickAddExpanded?.(true)
+              }}
+            >
+              Pick quick win
+            </button>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {guidance ? (
         guidance.onClick ? (
-          <button className="w-full rounded-3xl bg-panel/95 px-4 py-3 text-left text-sm font-medium text-slate-600 shadow-sm" type="button" onClick={guidance.onClick}>
+          <button className="inline-flex px-1 text-sm font-medium text-slate-500 underline-offset-4 transition hover:text-accent hover:underline" type="button" onClick={guidance.onClick}>
             {guidance.text}
           </button>
         ) : (
-          <p className="px-1 text-sm font-medium text-slate-600">{guidance.text}</p>
+          <p className="px-1 text-sm font-medium text-slate-500">{guidance.text}</p>
         )
       ) : null}
       <div key={primaryTaskId} className="ft-focus-swap">
@@ -90,7 +109,7 @@ export function FocusPage({
       </div>
 
       {secondaryTask ? (
-        <div key={secondaryTask.id} className="ft-enter-up space-y-2">
+        <div key={secondaryTask.id} className="ft-enter-up space-y-2 pt-1">
           <p className="px-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             {inProgressTask ? 'Already in progress' : 'Quick win'}
           </p>

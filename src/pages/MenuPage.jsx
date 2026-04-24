@@ -47,7 +47,7 @@ export function MenuPage({
           </button>
           <button className="rounded-3xl bg-white px-4 py-4 text-left text-sm font-semibold text-slate-700" type="button" onClick={onStartHere}>
             <span className="inline-flex items-center gap-2">
-              <Zap size={16} /> Start here
+              <Zap size={16} /> Go to next task
             </span>
           </button>
         </div>
