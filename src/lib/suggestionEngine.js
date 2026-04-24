@@ -86,10 +86,20 @@ function getChildName(task) {
   return 'They'
 }
 
+function getPersonName(task) {
+  const text = `${task.title} ${task.notes}`.toLowerCase()
+  if (/\bmartin'?s?\b/.test(text)) return 'Martin'
+  if (/\bmegan'?s?\b/.test(text)) return 'Megan'
+  if (/\bmatt'?s?\b/.test(text)) return 'Matt'
+  if (/\b(he|him|his|she|her|hers|kid|child|son|daughter)\b/.test(text)) return 'They'
+  return ''
+}
+
 function isSchoolShareContext(task) {
   const text = mergedContext(task)
   return (
     text.includes('show and tell') ||
+    (text.includes('share') && Boolean(getPersonName(task))) ||
     (text.includes('bring') && (text.includes('class') || text.includes('school'))) ||
     (text.includes('share') && (text.includes('class') || text.includes('school')))
   )
@@ -115,7 +125,13 @@ export function isGeneric(text) {
     'task is done',
     'task is completed',
     'completed',
-    'done',
+    'handled',
+    'finished',
+    'recorded',
+    'follow-up',
+    'follow up',
+    'managed',
+    'productivity',
     'stay organized',
     'keep things clean',
     'more organized',
@@ -192,13 +208,27 @@ function getLearnedSuggestion(taskTitle) {
 function buildFallback(task) {
   const object = sentenceCase(task.title || extractTaskObject(task.title))
   if (!object) return ''
-  return `${object} is fully ready and nothing is left to figure out`
+  return `${object} is fully taken care of and not left half-done`
 }
 
 function buildDoneResult(task) {
   const context = mergedContext(task)
   const category = task.category || ''
   const objectFromNote = noteObject(task.notes)
+  const title = task.title.trim()
+  const titleLower = title.toLowerCase()
+
+  if (titleLower.startsWith('help ')) {
+    const personName = getPersonName(task)
+    if (personName === 'Martin') return 'Martin has what he needs and is ready'
+    if (personName === 'Megan') return 'Megan has what she needs and is ready'
+    if (personName === 'Matt') return 'Matt has what he needs and is ready'
+    return 'They have what they need and are ready'
+  }
+
+  if (context.includes('get ready')) {
+    return 'Everything is ready and nothing is left to figure out'
+  }
 
   if (isSchoolShareContext(task)) {
     const childName = getChildName(task)
@@ -208,7 +238,11 @@ function buildDoneResult(task) {
   }
 
   if (context.includes('bounce house')) {
-    return 'Bounce house is deflated, folded, and stored with nothing left outside'
+    return 'Bounce house is put away and nothing is left outside'
+  }
+
+  if (/\b(put|store|stored|storing|pack|packed|packing)\b/.test(context) || context.includes('put away')) {
+    return 'Everything is put away and nothing is left out'
   }
 
   if (context.includes('sourdough') || context.includes('starter')) {
@@ -252,7 +286,7 @@ function buildDoneResult(task) {
   }
 
   if (category === 'Health') {
-    return `${extractTaskObject(task.title) || 'Health item'} is handled, recorded, and follow-up is clear`
+    return `${extractTaskObject(task.title) || 'Health item'} is ready and nothing is left to figure out`
   }
 
   return buildFallback(task)

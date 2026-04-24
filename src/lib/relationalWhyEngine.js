@@ -24,6 +24,7 @@ const BLOCKED_PATTERNS = [
   'completed',
   'improves',
   'does not disappear',
+  'comes back later',
 ]
 
 function canUseStorage() {
@@ -67,6 +68,7 @@ function isSchoolShareContext(task) {
   const text = mergedContext(task)
   return (
     text.includes('show and tell') ||
+    (text.includes('share') && Boolean(getPersonName(task))) ||
     (text.includes('bring') && (text.includes('class') || text.includes('school'))) ||
     (text.includes('share') && (text.includes('class') || text.includes('school')))
   )
@@ -193,14 +195,14 @@ function personWhy(task, context) {
 
   if (isSchoolShareContext(task)) {
     const childName = getChildName(task)
-    return childName === 'Martin' ? 'So Martin has something to share' : 'So they have something to share'
+    return childName === 'Martin' ? "So he's ready to bring something to share" : 'So they have something to share'
   }
 
-  if (personName === 'Martin') return "So he's prepared when it matters"
-  if (personName === 'Megan') return "So Megan does not have to deal with it"
-  if (personName === 'Matt') return "So Matt does not have to deal with it"
-  if (personName) return 'So they are prepared when it matters'
-  if (source === 'requested') return 'So they do not have to deal with it'
+  if (personName === 'Martin') return "So he's ready for it"
+  if (personName === 'Megan') return "So Megan doesn't have to deal with it"
+  if (personName === 'Matt') return "So Matt doesn't have to deal with it"
+  if (personName) return 'So they are ready for it'
+  if (source === 'requested') return "So they don't have to deal with it"
   return ''
 }
 
@@ -220,7 +222,7 @@ function buildUseCaseWhy(task) {
   if (text.includes('appointment') || text.includes('schedule')) return 'So the time is set before it matters'
   if (text.includes('call')) return 'So the answer is clear when needed'
   if (text.includes('buy') || text.includes('groceries')) return 'So it is there when needed'
-  if (task.isOverdue) return 'So this stops slipping further'
+  if (task.isOverdue) return "So you're not figuring it out last minute"
   return 'So this is ready when needed'
 }
 
