@@ -128,16 +128,17 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
         return
       }
 
-      const nextDoneSuggestion = generateDoneSuggestion(form.title)
+      const suggestionTask = {
+        title: form.title,
+        category: form.category,
+        assignedTo: form.assignedTo,
+        requestedBy: currentUser.id,
+        createdBy: currentUser.id,
+      }
+      const nextDoneSuggestion = generateDoneSuggestion(suggestionTask)
       const nextWhySuggestion = generateRelationalWhy(
-        {
-          title: form.title,
-          category: form.category,
-          assignedTo: form.assignedTo,
-          requestedBy: currentUser.id,
-          createdBy: currentUser.id,
-        },
-        currentUser,
+        suggestionTask,
+        { currentUser },
         usersById,
         whySeed,
       )
@@ -378,7 +379,7 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
               value={form.clarity}
               onFocus={() => {
                 if (!doneSuggestion && form.title.trim()) {
-                  setDoneSuggestion(generateDoneSuggestion(form.title))
+                  setDoneSuggestion(generateDoneSuggestion(form))
                 }
               }}
               onChange={(event) => updateField('clarity', event.target.value)}

@@ -97,16 +97,16 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
         return
       }
 
-      const nextDoneSuggestion = generateDoneSuggestion(form.title)
+      const suggestionTask = {
+        ...task,
+        ...form,
+        requestedBy: task.requestedBy ?? currentUser?.id,
+        createdBy: task.requestedBy ?? currentUser?.id,
+      }
+      const nextDoneSuggestion = generateDoneSuggestion(suggestionTask)
       const nextWhySuggestion = generateRelationalWhy(
-        {
-          title: form.title,
-          category: form.category,
-          assignedTo: form.assignedTo,
-          requestedBy: task.requestedBy ?? currentUser?.id,
-          createdBy: task.requestedBy ?? currentUser?.id,
-        },
-        currentUser,
+        suggestionTask,
+        { currentUser },
         usersById,
         whySeed,
       )
@@ -522,7 +522,7 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
             value={form.clarity}
             onFocus={() => {
               if (!doneSuggestion && form.title.trim()) {
-                setDoneSuggestion(generateDoneSuggestion(form.title))
+                setDoneSuggestion(generateDoneSuggestion({ ...task, ...form }))
               }
             }}
             onChange={(event) => updateField('clarity', event.target.value)}

@@ -1,47 +1,19 @@
 const DONE_STORAGE_KEY = 'follow-through-done-patterns'
-const DONE_STOP_WORDS = new Set([
-  'a',
-  'an',
-  'and',
-  'for',
-  'from',
-  'in',
-  'of',
-  'on',
-  'the',
-  'to',
-  'with',
-  'my',
-  'our',
-  'your',
-])
-
-const DONE_RULES = [
-  { matches: ['make', 'snacks'], suggestion: 'Snacks prepared and ready to serve' },
-  { matches: ['clean', 'dog', 'poop'], suggestion: 'All waste removed and disposed properly' },
-  { matches: ['wash', 'dog', 'stuff'], suggestion: 'Dog beds and gear washed and put away' },
-  { matches: ['schedule', 'dentist'], suggestion: 'Appointment booked and confirmed with date saved' },
-  { matches: ['clean', 'kitchen'], suggestion: 'Counters clear, dishes done, sink wiped clean' },
-  { matches: ['call', 'insurance'], suggestion: 'Agent reached and claim status clearly confirmed' },
-  { matches: ['buy', 'groceries'], suggestion: 'Groceries purchased and put away properly' },
-  { matches: ['fix', 'faucet'], suggestion: 'Leak stopped and faucet working normally' },
-  { matches: ['plan', 'date', 'night'], suggestion: 'Reservation booked and plans confirmed' },
-  { matches: ['pick', 'up', 'medications'], suggestion: 'Medications picked up and brought home' },
-  { matches: ['clean', 'jacuzzi'], suggestion: 'Jacuzzi cleaned and ready to use' },
-  { matches: ['put', 'away'], suggestion: 'Items put away and out of sight' },
-  { matches: ['review', 'budget'], suggestion: 'Budget reviewed and next steps agreed' },
-  { matches: ['schedule'], suggestion: 'Appointment booked and date saved' },
-  { matches: ['clean'], suggestion: 'Area cleaned and reset for use' },
-  { matches: ['call'], suggestion: 'Call completed and outcome clearly noted' },
-  { matches: ['buy'], suggestion: 'Items purchased and put away' },
-  { matches: ['pick', 'up'], suggestion: 'Item picked up and brought home' },
-  { matches: ['pay'], suggestion: 'Payment submitted and confirmation received' },
-  { matches: ['email'], suggestion: 'Email sent and response handled' },
-  { matches: ['fix'], suggestion: 'Issue fixed and working properly' },
-]
+const STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'in', 'on', 'with', 'my'])
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+}
+
+function normalizeTaskInput(taskOrTitle) {
+  if (typeof taskOrTitle === 'string') {
+    return { title: taskOrTitle, category: '' }
+  }
+
+  return {
+    title: taskOrTitle?.title ?? '',
+    category: taskOrTitle?.category ?? '',
+  }
 }
 
 function normalizeTaskTitle(title = '') {
@@ -50,7 +22,41 @@ function normalizeTaskTitle(title = '') {
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
-    .filter((token) => !DONE_STOP_WORDS.has(token))
+    .filter((token) => !STOP_WORDS.has(token))
+}
+
+export function hasEnoughContent(text) {
+  if (!text) return false
+  const cleaned = text
+    .toLowerCase()
+    .replace(/\b(a|an|the|to|for|of|and|or|in|on|with|my)\b/g, '')
+    .trim()
+  return cleaned.split(' ').filter(Boolean).length >= 3
+}
+
+export function isGeneric(text) {
+  if (!text) return true
+
+  const banned = [
+    'improves',
+    'helps',
+    'makes it better',
+    'things are better',
+    'task is done',
+    'stay organized',
+    'keep things clean',
+    'more organized',
+  ]
+
+  return banned.some((phrase) => text.toLowerCase().includes(phrase))
+}
+
+export function enforceQuality(text) {
+  if (!text) return null
+  const cleaned = text.replace(/\s+/g, ' ').trim()
+  if (isGeneric(cleaned)) return null
+  if (cleaned.split(' ').filter(Boolean).length < 6) return null
+  return cleaned
 }
 
 function getStoredPatterns() {
@@ -110,48 +116,55 @@ function getLearnedSuggestion(taskTitle) {
   return bestScore >= 0.6 ? bestSuggestion : ''
 }
 
-function limitWords(text, maxWords = 12) {
-  const words = text.trim().split(/\s+/).filter(Boolean)
-  return words.slice(0, maxWords).join(' ')
+function fallbackDone(title) {
+  const readableTitle = title.trim()
+  if (!readableTitle) return ''
+  return `${readableTitle} is done and no longer needs attention`
 }
 
-function hasValidDoneShape(text) {
-  const words = text.trim().split(/\s+/).filter(Boolean)
-  if (words.length < 5 || words.length > 12) return false
-  return /(ed|ready|clear|clean|saved|confirmed|received|removed|put|working|reviewed|prepared|disposed)$/i.test(words.at(-1)) || / and /i.test(text)
-}
+export function generateDoneSuggestion(taskOrTitle) {
+  const task = normalizeTaskInput(taskOrTitle)
+  const title = task.title.toLowerCase()
+  const category = task.category || ''
 
-function sanitizeDoneSuggestion(text) {
-  if (!text) return ''
-  if (/\b(helps|because|so that)\b/i.test(text)) return ''
-  const trimmed = limitWords(text.replace(/\s+/g, ' '))
-  return hasValidDoneShape(trimmed) ? trimmed : ''
-}
-
-function buildFallback(tokens) {
-  if (!tokens.length) return ''
-  if (tokens.includes('clean')) return 'Area cleaned and ready to use'
-  if (tokens.includes('wash')) return 'Items washed and put away'
-  if (tokens.includes('plan')) return 'Plan confirmed and details recorded'
-  if (tokens.includes('schedule')) return 'Appointment booked and date saved'
-  if (tokens.includes('fix')) return 'Issue fixed and working properly'
-  return ''
-}
-
-export function generateDoneSuggestion(taskTitle) {
-  const learned = sanitizeDoneSuggestion(getLearnedSuggestion(taskTitle))
+  const learned = enforceQuality(getLearnedSuggestion(task.title))
   if (learned) return learned
 
-  const tokens = normalizeTaskTitle(taskTitle)
-  if (!tokens.length) return ''
+  let result = null
 
-  const matchedRule = DONE_RULES.find((rule) => rule.matches.every((token) => tokens.includes(token)))
-  return sanitizeDoneSuggestion(matchedRule?.suggestion) || buildFallback(tokens)
+  if (category === 'Home') {
+    if (title.includes('garage')) {
+      result = 'Garage is fully cleared, items put away, and floor space is open'
+    } else if (title.includes('dog') && (title.includes('poop') || title.includes('waste'))) {
+      result = 'All waste is removed and disposed, yard is clean'
+    } else if (title.includes('dog') && (title.includes('wash') || title.includes('stuff') || title.includes('bed'))) {
+      result = 'Dog beds and gear are washed and put away'
+    } else if (title.includes('clean')) {
+      result = 'Surfaces wiped, items put away, and area is visibly clean'
+    }
+  }
+
+  if (!result && category === 'Health') {
+    if (title.includes('appointment') || title.includes('schedule')) {
+      result = 'Appointment is booked, confirmed, and saved with details'
+    } else if (title.includes('shot') || title.includes('medicine') || title.includes('medication')) {
+      result = 'Medicine is taken and any follow-up is recorded'
+    } else {
+      result = 'Health task is completed fully with no follow-up needed'
+    }
+  }
+
+  if (!result) {
+    result = task.title ? `${task.title} is fully completed with no remaining steps` : ''
+  }
+
+  const final = enforceQuality(result)
+  return final || fallbackDone(task.title)
 }
 
 export function saveDonePattern(taskTitle, doneText) {
   const normalized = normalizeTaskTitle(taskTitle).join(' ')
-  const sanitized = sanitizeDoneSuggestion(doneText)
+  const sanitized = enforceQuality(doneText)
   if (!normalized || !sanitized) return
 
   const current = getStoredPatterns()
