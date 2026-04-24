@@ -19,6 +19,9 @@ const OBJECT_STOP_WORDS = new Set([
   'buy',
   'review',
   'finish',
+  'help',
+  'ready',
+  'bring',
 ])
 
 function canUseStorage() {
@@ -63,6 +66,11 @@ function extractTaskObject(title = '') {
     .join(' ')
 
   return sentenceCase(cleaned || title)
+}
+
+function shortObject(title = '') {
+  const object = extractTaskObject(title)
+  return object.split(/\s+/).slice(0, 4).join(' ')
 }
 
 function noteObject(notes = '') {
@@ -132,6 +140,9 @@ export function isGeneric(text) {
     'follow up',
     'managed',
     'productivity',
+    'ready and nothing is left to figure out',
+    'fully taken care of',
+    'nothing left to do',
     'stay organized',
     'keep things clean',
     'more organized',
@@ -206,9 +217,9 @@ function getLearnedSuggestion(taskTitle) {
 }
 
 function buildFallback(task) {
-  const object = sentenceCase(task.title || extractTaskObject(task.title))
+  const object = shortObject(task.title)
   if (!object) return ''
-  return `${object} is fully taken care of and not left half-done`
+  return `${object} is prepared and ready to use`
 }
 
 function buildDoneResult(task) {
@@ -227,66 +238,73 @@ function buildDoneResult(task) {
   }
 
   if (context.includes('get ready')) {
-    return 'Everything is ready and nothing is left to figure out'
+    const object = shortObject(task.title.replace(/get ready/gi, ''))
+    return `${object || 'Everything'} is packed and ready to use`
   }
 
   if (isSchoolShareContext(task)) {
     const childName = getChildName(task)
     const verb = childName === 'They' ? 'have' : 'has'
-    const pronoun = childName === 'They' ? 'their' : 'his'
-    return `${childName} ${verb} something ready to bring in and share with ${pronoun} class`
+    return `${childName} ${verb} something ready to share in class`
   }
 
   if (context.includes('bounce house')) {
-    return 'Bounce house is put away and nothing is left outside'
+    return context.includes('shed')
+      ? 'Bounce house is deflated and stored in the shed'
+      : 'Bounce house is deflated and stored away'
   }
 
   if (/\b(put|store|stored|storing|pack|packed|packing)\b/.test(context) || context.includes('put away')) {
-    return 'Everything is put away and nothing is left out'
+    const object = shortObject(task.title)
+    return `${object || 'Everything'} is put away and cleared`
   }
 
   if (context.includes('sourdough') || context.includes('starter')) {
-    return 'Sourdough starter is fed, labeled, and stored at the right temperature'
+    return 'Sourdough starter is fed and stored properly'
   }
 
   if (context.includes('garage')) {
-    return 'Garage floor is open, items are put away, and walkway is clear'
+    return 'Garage is cleared and walkway is open'
   }
 
   if (context.includes('dog') && (context.includes('poop') || context.includes('waste'))) {
-    return 'Dog waste is removed, bagged, and disposed with yard clear'
+    return 'Dog waste is removed and thrown away'
   }
 
   if (context.includes('dog') && (context.includes('wash') || context.includes('stuff') || context.includes('bed'))) {
-    return 'Dog beds and gear are washed, dried, and put away'
+    return 'Dog beds and gear are washed and put away'
   }
 
   if (context.includes('date night')) {
-    return 'Date night is chosen, time is set, and details are saved'
+    return 'Date night is chosen and time is set'
   }
 
   if (context.includes('appointment') || context.includes('schedule')) {
-    return `${objectFromNote || extractTaskObject(task.title) || 'Appointment'} is booked, confirmed, and saved with date and time`
+    return `${objectFromNote || shortObject(task.title) || 'Appointment'} is booked and time is set`
   }
 
   if (context.includes('shot') || context.includes('medicine') || context.includes('medication')) {
-    return `${objectFromNote || extractTaskObject(task.title) || 'Medicine'} is taken, logged, and supplies are put away`
+    return `${objectFromNote || shortObject(task.title) || 'Medicine'} is taken and supplies are put away`
   }
 
   if (context.includes('call')) {
-    return `${extractTaskObject(task.title) || 'Call'} is made, outcome is noted, and next step is clear`
+    return `${shortObject(task.title) || 'Call'} is made and answer is clear`
   }
 
-  if (context.includes('buy') || context.includes('groceries')) {
-    return `${extractTaskObject(task.title) || 'Items'} are purchased, checked, and put away`
+  if (context.includes('food') || context.includes('groceries') || context.includes('pet')) {
+    return `${shortObject(task.title) || 'Food'} is bought and put away`
+  }
+
+  if (context.includes('buy')) {
+    return `${shortObject(task.title) || 'Items'} are bought and put away`
   }
 
   if (context.includes('clean') || category === 'Home') {
-    return `${extractTaskObject(task.title) || 'Area'} is cleared, wiped, and ready to use`
+    return `${shortObject(task.title) || 'Area'} is cleared and ready to use`
   }
 
   if (category === 'Health') {
-    return `${extractTaskObject(task.title) || 'Health item'} is ready and nothing is left to figure out`
+    return `${shortObject(task.title) || 'Health item'} is ready and set out`
   }
 
   return buildFallback(task)

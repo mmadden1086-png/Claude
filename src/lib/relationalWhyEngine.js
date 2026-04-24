@@ -25,6 +25,9 @@ const BLOCKED_PATTERNS = [
   'improves',
   'does not disappear',
   'comes back later',
+  'otherwise it just sits',
+  'sits there',
+  'sits out',
 ]
 
 function canUseStorage() {
@@ -176,6 +179,8 @@ function hasPhysicalObject(task) {
     'dish',
     'dog',
     'faucet',
+    'feed',
+    'food',
     'garage',
     'gear',
     'groceries',
@@ -184,6 +189,7 @@ function hasPhysicalObject(task) {
     'room',
     'sink',
     'space',
+    'pet',
     'trash',
     'yard',
   ].some((keyword) => text.includes(keyword))
@@ -208,10 +214,11 @@ function personWhy(task, context) {
 
 function environmentWhy(task) {
   const text = mergedContext(task)
-  if (text.includes('bounce house')) return 'Otherwise it just sits out'
+  if (text.includes('food') || text.includes('feed') || text.includes('pet')) return "So you have it when it's time to feed them"
+  if (text.includes('bounce house') || text.includes('shed') || /\b(put|store|stored|pack)\b/.test(text)) return "So it's not left out"
   if (text.includes('kitchen') || text.includes('sink') || text.includes('counter')) return 'So the kitchen stays usable'
   if (text.includes('garage')) return 'So the garage stays usable'
-  if (text.includes('trash') || text.includes('dog') || text.includes('poop')) return 'Otherwise it just sits there'
+  if (text.includes('trash') || text.includes('dog') || text.includes('poop')) return 'So the yard stays usable'
   if (text.includes('faucet') || text.includes('leak')) return 'So the problem does not get worse'
   if (text.includes('bed') || text.includes('room')) return 'So the room feels usable'
   return 'So the space stays usable'
@@ -246,7 +253,7 @@ function finalWhy(result) {
 
 function fallbackWhy(task) {
   void task
-  return 'This needs to be ready for when it comes up'
+  return "So it's ready when you need it"
 }
 
 export function isUnsafeWhyText(text = '') {
