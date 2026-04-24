@@ -71,6 +71,30 @@ function noteObject(notes = '') {
   return cleaned.split(/[.!?]/)[0].split(/\s+/).slice(0, 8).join(' ')
 }
 
+function hasMeaningfulNotes(notes = '') {
+  return hasEnoughContent(notes) && !isGeneric(notes)
+}
+
+function mergedContext(task) {
+  const notes = hasMeaningfulNotes(task.notes) ? task.notes : ''
+  return `${notes} ${task.title}`.toLowerCase()
+}
+
+function getChildName(task) {
+  const text = `${task.title} ${task.notes}`.toLowerCase()
+  if (/\bmartin'?s?\b/.test(text)) return 'Martin'
+  return 'They'
+}
+
+function isSchoolShareContext(task) {
+  const text = mergedContext(task)
+  return (
+    text.includes('show and tell') ||
+    (text.includes('bring') && (text.includes('class') || text.includes('school'))) ||
+    (text.includes('share') && (text.includes('class') || text.includes('school')))
+  )
+}
+
 export function hasEnoughContent(text) {
   if (!text) return false
   const cleaned = text
@@ -166,57 +190,64 @@ function getLearnedSuggestion(taskTitle) {
 }
 
 function buildFallback(task) {
-  const object = extractTaskObject(task.title)
+  const object = sentenceCase(task.title || extractTaskObject(task.title))
   if (!object) return ''
-  return `${object} is cleared, reset, and ready with nothing left loose`
+  return `${object} is fully ready and nothing is left to figure out`
 }
 
 function buildDoneResult(task) {
-  const title = task.title.toLowerCase()
+  const context = mergedContext(task)
   const category = task.category || ''
   const objectFromNote = noteObject(task.notes)
 
-  if (title.includes('bounce house')) {
+  if (isSchoolShareContext(task)) {
+    const childName = getChildName(task)
+    const verb = childName === 'They' ? 'have' : 'has'
+    const pronoun = childName === 'They' ? 'their' : 'his'
+    return `${childName} ${verb} something ready to bring in and share with ${pronoun} class`
+  }
+
+  if (context.includes('bounce house')) {
     return 'Bounce house is deflated, folded, and stored with nothing left outside'
   }
 
-  if (title.includes('sourdough') || title.includes('starter')) {
+  if (context.includes('sourdough') || context.includes('starter')) {
     return 'Sourdough starter is fed, labeled, and stored at the right temperature'
   }
 
-  if (title.includes('garage')) {
+  if (context.includes('garage')) {
     return 'Garage floor is open, items are put away, and walkway is clear'
   }
 
-  if (title.includes('dog') && (title.includes('poop') || title.includes('waste'))) {
+  if (context.includes('dog') && (context.includes('poop') || context.includes('waste'))) {
     return 'Dog waste is removed, bagged, and disposed with yard clear'
   }
 
-  if (title.includes('dog') && (title.includes('wash') || title.includes('stuff') || title.includes('bed'))) {
+  if (context.includes('dog') && (context.includes('wash') || context.includes('stuff') || context.includes('bed'))) {
     return 'Dog beds and gear are washed, dried, and put away'
   }
 
-  if (title.includes('date night')) {
+  if (context.includes('date night')) {
     return 'Date night is chosen, time is set, and details are saved'
   }
 
-  if (title.includes('appointment') || title.includes('schedule')) {
+  if (context.includes('appointment') || context.includes('schedule')) {
     return `${objectFromNote || extractTaskObject(task.title) || 'Appointment'} is booked, confirmed, and saved with date and time`
   }
 
-  if (title.includes('shot') || title.includes('medicine') || title.includes('medication')) {
+  if (context.includes('shot') || context.includes('medicine') || context.includes('medication')) {
     return `${objectFromNote || extractTaskObject(task.title) || 'Medicine'} is taken, logged, and supplies are put away`
   }
 
-  if (title.includes('call')) {
+  if (context.includes('call')) {
     return `${extractTaskObject(task.title) || 'Call'} is made, outcome is noted, and next step is clear`
   }
 
-  if (title.includes('buy') || title.includes('groceries')) {
+  if (context.includes('buy') || context.includes('groceries')) {
     return `${extractTaskObject(task.title) || 'Items'} are purchased, checked, and put away`
   }
 
-  if (title.includes('clean') || category === 'Home') {
+  if (context.includes('clean') || category === 'Home') {
     return `${extractTaskObject(task.title) || 'Area'} is cleared, wiped, and ready to use`
   }
 

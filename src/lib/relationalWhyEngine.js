@@ -1,4 +1,4 @@
-import { enforceQuality, isGeneric } from './suggestionEngine'
+import { enforceQuality, hasEnoughContent, isGeneric } from './suggestionEngine'
 
 const WHY_STORAGE_KEY = 'follow-through-why-patterns'
 const STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'in', 'on', 'with', 'my'])
@@ -70,6 +70,30 @@ function extractTaskObject(title = '') {
     .join(' ')
 
   return sentenceCase(cleaned || title)
+}
+
+function hasMeaningfulNotes(notes = '') {
+  return hasEnoughContent(notes) && !isGeneric(notes)
+}
+
+function mergedContext(task) {
+  const notes = hasMeaningfulNotes(task.notes) ? task.notes : ''
+  return `${notes} ${task.title}`.toLowerCase()
+}
+
+function getChildName(task) {
+  const text = `${task.title} ${task.notes}`.toLowerCase()
+  if (/\bmartin'?s?\b/.test(text)) return 'Martin'
+  return 'they'
+}
+
+function isSchoolShareContext(task) {
+  const text = mergedContext(task)
+  return (
+    text.includes('show and tell') ||
+    (text.includes('bring') && (text.includes('class') || text.includes('school'))) ||
+    (text.includes('share') && (text.includes('class') || text.includes('school')))
+  )
 }
 
 function getCurrentUserId(context = {}) {
@@ -181,6 +205,14 @@ function buildWhy(task, context) {
   const source = getTaskSource(task, context.currentUser ?? context)
   const noteContext = cleanNoteContext(task.notes)
 
+  if (isSchoolShareContext(task)) {
+    const childName = getChildName(task)
+    if (childName === 'Martin') {
+      return "If this isn't ready, he shows up without something to share"
+    }
+    return "If this isn't ready, they show up without something to share"
+  }
+
   if (task.isOverdue) {
     return `${taskObject} already slipped - leaving it longer makes the next step heavier${noteContext ? `: ${noteContext}` : ''}`
   }
@@ -196,15 +228,17 @@ function buildWhy(task, context) {
   return `${taskObject} does not disappear when ignored - it sits there until you deal with it${noteContext ? `: ${noteContext}` : ''}`
 }
 
-function finalWhy(result, taskObject) {
+function finalWhy(result, taskObject, options = {}) {
+  const { requireObject = true } = options
   const limited = limitWords(result, 30)
-  if (!limited || isBlocked(limited) || !hasTaskObject(limited, taskObject)) return null
+  if (!limited || isBlocked(limited)) return null
+  if (requireObject && !hasTaskObject(limited, taskObject)) return null
   return enforceQuality(limited)
 }
 
 function fallbackWhy(task) {
-  const taskObject = extractTaskObject(task.title)
-  return `${taskObject} has a real next step, and leaving it open keeps the pressure around`
+  void task
+  return 'This needs to be ready for when it comes up'
 }
 
 export function isUnsafeWhyText(text = '') {
@@ -228,7 +262,7 @@ export function generateRelationalWhy(task, context = {}, usersById = {}, seed =
   const firstPass = finalWhy(buildWhy(task, context), taskObject)
   if (firstPass) return firstPass
 
-  return finalWhy(fallbackWhy(task), taskObject) ?? ''
+  return finalWhy(fallbackWhy(task), taskObject, { requireObject: false }) ?? ''
 }
 
 export function saveWhyPattern(taskTitle, whyText) {
