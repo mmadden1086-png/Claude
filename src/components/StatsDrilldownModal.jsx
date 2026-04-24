@@ -199,8 +199,8 @@ export function StatsDrilldownModal({
   }
 
   return (
-    <section className="fixed inset-0 z-50 bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
-      <div className="mx-auto max-h-[calc(100vh-3rem)] max-w-md overflow-y-auto rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+      <div className="max-h-full w-full max-w-md overflow-y-auto rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-xl font-semibold text-ink">{titleMap[view?.type] ?? 'Stats'}</h2>
           <button className="rounded-full bg-white p-3 text-slate-600" type="button" onClick={onClose}>

@@ -1,7 +1,7 @@
 import { Check, ChevronRight, Clock3, Play } from 'lucide-react'
 import { clsx } from 'clsx'
 import { TASK_STATUS } from '../lib/constants'
-import { describeRepeat, formatDueContext, formatStatusLabel, getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, nextRepeatLabel } from '../lib/format'
+import { formatDueContext, getTaskStatus, isDueWithinHours, isOverdue, isSnoozed } from '../lib/format'
 import { shouldShowFrictionFix } from '../lib/task-decision'
 import { getWhyDisplayDecision } from '../lib/why-strength'
 
@@ -75,8 +75,6 @@ export function TaskCard({
   const tags = listTags(task)
   const isFocus = variant === 'focus'
   const clarity = meaningfulClarity(task)
-  const repeatText = describeRepeat(task)
-  const repeatNextText = nextRepeatLabel(task)
 
   function handleCardClick() {
     if (isFocus && status === TASK_STATUS.NOT_STARTED) {
@@ -112,28 +110,20 @@ export function TaskCard({
           }
         }}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-col gap-3">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               {tags.map((tag) => (
                 <span key={tag.label} className={clsx('rounded-full px-3 py-1 text-xs font-semibold', pillClass(tag.tone))}>
                   {tag.label}
                 </span>
               ))}
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                {formatStatusLabel(task)}
-              </span>
             </div>
-            <h3 className="mt-3 line-clamp-2 text-base font-semibold leading-snug text-ink">{task.title}</h3>
-            {impactMessage ? <p className="mt-2 line-clamp-1 text-sm text-slate-600">{impactMessage}</p> : null}
-            {repeatText || repeatNextText ? (
-              <p className="mt-2 text-xs text-slate-500">
-                {[repeatText, repeatNextText].filter(Boolean).join(' - ')}
-              </p>
-            ) : null}
+            <h3 className="mt-2.5 line-clamp-2 text-base font-semibold leading-snug text-ink">{task.title}</h3>
+            {impactMessage ? <p className="mt-1.5 line-clamp-1 text-sm text-slate-600">{impactMessage}</p> : null}
           </div>
 
-          <div className="shrink-0 rounded-3xl bg-canvas px-3 py-2 text-right text-xs font-medium text-slate-600">
+          <div className="rounded-3xl bg-canvas px-3 py-2 text-xs font-medium text-slate-600">
             <p>{formatDueContext(task)}</p>
             {interactive ? (
               <p className="mt-2 inline-flex items-center gap-1 text-accent">
@@ -174,13 +164,13 @@ export function TaskCard({
         }
       }}
     >
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <div className="space-y-2">
           {focusBadge ? (
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-accent">{focusBadge}</p>
           ) : null}
-          <h2 className="text-[1.65rem] font-semibold leading-tight text-ink">{task.title}</h2>
-          {impactMessage ? <p className="text-sm text-slate-600">{impactMessage}</p> : null}
+          <h2 className="text-[1.8rem] font-semibold leading-tight text-ink">{task.title}</h2>
+          {impactMessage ? <p className="text-sm leading-6 text-slate-600">{impactMessage}</p> : null}
           {task.dueTime || task.dueDate ? <p className="text-sm font-medium text-slate-500">{formatDueContext(task)}</p> : null}
         </div>
 
@@ -203,20 +193,20 @@ export function TaskCard({
         ) : null}
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-2">
+      <div className="mt-4 flex flex-col gap-2">
         <button
-          className="flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-4 font-semibold text-white"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98]"
           type="button"
           onClick={(event) => stopAndRun(event, primaryAction.action)}
         >
           <primaryAction.icon size={16} /> {primaryAction.label}
         </button>
 
-        <div className={`grid gap-2 ${secondaryActions.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className="flex gap-2 flex-wrap">
           {secondaryActions.map((item) => (
             <button
               key={item.action}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 py-4 font-medium text-slate-700"
+              className="flex min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
               type="button"
               onClick={(event) => stopAndRun(event, item.action)}
             >

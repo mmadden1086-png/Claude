@@ -78,16 +78,18 @@ export function ActivityPage({
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Activity"
-        body="Track record, recent motion, and shared activity."
-        meta={`${stats.totalCompleted} completed - ${stats.reliability}% reliability`}
-      />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="space-y-4">
+          <PageHeader
+            title="Activity"
+            body="Track record, recent motion, and shared activity."
+            meta={`${stats.totalCompleted} completed - ${stats.reliability}% reliability`}
+          />
 
-      <div className="flex justify-end">
+      <div>
         <button
-          className="rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white"
+          className="w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
           type="button"
           onClick={() => onStatsDrilldown?.({ type: 'goals', focus: 'reliability' })}
         >
@@ -151,7 +153,15 @@ export function ActivityPage({
         )}
       </SectionCard>
 
-      <SectionCard title="Date Nights" subtitle="What should you do next? Repeat a good date or plan the next one.">
+      <SectionCard
+        title="Date Nights"
+        subtitle="What should you do next? Repeat a good date or plan the next one."
+        action={(
+          <button className="rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateNight}>
+            Plan a date night
+          </button>
+        )}
+      >
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-3xl bg-canvas p-4">
             <p className="text-2xl font-semibold text-accent">{dateNightSummary.totalThisMonth}</p>
@@ -177,7 +187,7 @@ export function ActivityPage({
               <div key={entry.idea.id} className="rounded-3xl bg-white p-4">
                 <p className="font-medium text-ink">{entry.idea.title}</p>
                 <p className="mt-1 text-sm text-slate-600">{entry.rating.toFixed(1)}/5 average</p>
-                <button className="mt-3 rounded-2xl bg-accentSoft px-3 py-2 text-sm font-medium text-accent" type="button" onClick={() => onRepeatDateIdea(entry.idea)}>
+                <button className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onRepeatDateIdea(entry.idea)}>
                   Do again
                 </button>
               </div>
@@ -196,8 +206,8 @@ export function ActivityPage({
                 </p>
                 {entry.notes ? <p className="mt-2 text-sm text-slate-500">{entry.notes}</p> : null}
                 {idea ? (
-                  <button className="mt-3 rounded-2xl bg-accentSoft px-3 py-2 text-sm font-medium text-accent" type="button" onClick={() => onRepeatDateIdea(idea)}>
-                    Repeat this date
+                  <button className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onRepeatDateIdea(idea)}>
+                    Do again
                   </button>
                 ) : null}
               </div>
@@ -211,6 +221,25 @@ export function ActivityPage({
             </button>
           </div>
         )}
+      </SectionCard>
+
+      <SectionCard
+        title="Missed"
+        subtitle="What should you do next? Review or reschedule the tasks that slipped."
+        action={(
+          <button
+            className="rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+            type="button"
+            onClick={() => onStatsDrilldown?.({ type: 'missed' })}
+          >
+            Fix missed tasks
+          </button>
+        )}
+      >
+        <div className="rounded-3xl bg-canvas p-4">
+          <p className="text-2xl font-semibold text-accent">{stats.missedCount}</p>
+          <p className="mt-1 text-sm text-slate-600">{stats.missedCount ? 'Tasks still need recovery' : 'Nothing is missed right now'}</p>
+        </div>
       </SectionCard>
 
       <SectionCard title="Repeat cycles" subtitle="What should you do next? Review the next recurring task.">
@@ -283,6 +312,8 @@ export function ActivityPage({
           </button>
         </div>
       </SectionCard>
+        </div>
+      </div>
     </div>
   )
 }

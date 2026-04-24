@@ -200,9 +200,9 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
 
   if (!isEditing) {
     return (
-      <section className="fixed inset-0 z-50 overflow-y-auto bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+      <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
         <div
-          className="mx-auto max-h-[calc(100vh-3rem)] max-w-2xl overflow-y-auto rounded-4xl bg-panel p-5 shadow-card"
+          className="max-h-full w-full max-w-2xl overflow-y-auto rounded-4xl bg-panel p-5 shadow-card"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex items-start justify-between gap-4">
@@ -332,9 +332,9 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
   }
 
   return (
-    <section className="fixed inset-0 z-50 overflow-y-auto bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="mx-auto max-h-[calc(100vh-3rem)] max-w-2xl overflow-y-auto rounded-4xl bg-panel p-5 shadow-card"
+        className="max-h-full w-full max-w-2xl overflow-y-auto rounded-4xl bg-panel p-5 shadow-card"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">

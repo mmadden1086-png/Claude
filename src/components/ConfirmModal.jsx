@@ -12,11 +12,11 @@ export function ConfirmModal({ title, body, actions, onCancel, busy = false }) {
     })
 
   return (
-    <section className="fixed inset-0 z-50 bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={busy ? undefined : onCancel}>
-      <div className="mx-auto max-w-md rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={busy ? undefined : onCancel}>
+      <div className="w-full max-w-md rounded-[1.75rem] bg-panel p-6 shadow-card" onClick={(event) => event.stopPropagation()}>
         <h2 className="text-xl font-semibold text-ink">{title}</h2>
         {body ? <p className="mt-3 text-base leading-relaxed text-slate-700">{body}</p> : null}
-        <div className="mt-6 space-y-3">
+        <div className="mt-7 space-y-4">
           {resolvedActions.map((action) => (
             <button
               key={action.label}

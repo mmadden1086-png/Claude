@@ -22,8 +22,10 @@ export function MenuPage({
   const navigate = useNavigate()
 
   return (
-    <div className="space-y-4">
-      <PageHeader title="Menu" body="Settings, notifications, account, and system controls." />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="space-y-4">
+          <PageHeader title="Menu" body="Settings, notifications, account, and system controls." />
 
       <SectionCard title="System controls" subtitle="Adjust how Follow Through surfaces work.">
         <div className="grid gap-2">
@@ -106,6 +108,8 @@ export function MenuPage({
           </span>
         </button>
       </SectionCard>
+        </div>
+      </div>
     </div>
   )
 }

@@ -3,8 +3,8 @@ import { formatDueContext } from '../lib/format'
 
 export function DuplicateTaskModal({ task, onUpdateExisting, onKeepBoth, onCancel }) {
   return (
-    <section className="fixed inset-0 z-50 bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onCancel}>
-      <div className="mx-auto max-w-md rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onCancel}>
+      <div className="w-full max-w-md rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold text-ink">Possible duplicate</h2>

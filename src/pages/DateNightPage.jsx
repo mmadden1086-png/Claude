@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { DATE_BUDGET_OPTIONS, DATE_CATEGORY_OPTIONS, DATE_DURATION_OPTIONS, generateDateSuggestions, getDateIdeaPool, pickDateForUs } from '../lib/date-night'
+import { toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 import { SectionCard } from '../components/SectionCard'
 
@@ -51,40 +52,40 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
   )
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Date Nights"
-        body="Store ideas, get a few strong options fast, and track what you want to repeat."
-      />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="space-y-4">
+          <PageHeader
+            title="Date Nights"
+            body="Store ideas, get a few strong options fast, and track what you want to repeat."
+          />
 
       <SectionCard title="This month">
         <div className="rounded-3xl bg-white p-4">
           <p className="text-sm font-medium text-ink">
             {monthlyDateStatus.status === 'completed'
-              ? 'Date night completed this month'
+              ? 'Completed this month'
               : monthlyDateStatus.status === 'planned'
-                ? 'Date night planned this month'
+                ? `Date planned: ${toDate(monthlyDateStatus.plannedTask?.dueDate)?.toLocaleDateString() ?? 'This month'}`
                 : 'No date planned this month'}
           </p>
-          {monthlyDateStatus.status !== 'completed' ? (
-            <button
-              className="mt-3 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white"
-              type="button"
-              onClick={() => {
-                if (pickedForUs?.idea) {
-                  onSelectDateIdea(pickedForUs.idea)
-                  return
-                }
-                if (fallbackPick?.idea) {
-                  onSelectDateIdea(fallbackPick.idea)
-                  return
-                }
-                onOpenDateIdeaModal()
-              }}
-            >
-              {pickedForUs?.idea || fallbackPick?.idea ? 'Pick for us' : 'Add idea'}
-            </button>
-          ) : null}
+          <button
+            className="mt-3 w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+            type="button"
+            onClick={() => {
+              if (pickedForUs?.idea) {
+                onSelectDateIdea(pickedForUs.idea)
+                return
+              }
+              if (fallbackPick?.idea) {
+                onSelectDateIdea(fallbackPick.idea)
+                return
+              }
+              onOpenDateIdeaModal()
+            }}
+          >
+            Pick for us
+          </button>
         </div>
       </SectionCard>
 
@@ -92,7 +93,7 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
         title="Generate a date"
         subtitle="Get up to three solid options fast."
         action={(
-          <button className="rounded-full bg-white px-3 py-2 text-sm text-slate-600" type="button" onClick={onOpenDateIdeaModal}>
+          <button className="rounded-full bg-white px-3 py-2 text-sm text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateIdeaModal}>
             Add idea
           </button>
         )}
@@ -112,7 +113,7 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
           ) : null}
         </label>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <select className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-700" value={dateFilters.budget} onChange={(event) => setDateFilters((current) => ({ ...current, budget: event.target.value }))}>
             {DATE_BUDGET_OPTIONS.map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -144,7 +145,7 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
                     {entry.label ? <p className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent">{entry.label}</p> : null}
                   </div>
                 </div>
-                <button className="mt-3 rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-white" type="button" onClick={() => onSelectDateIdea(entry.idea)}>
+                <button className="mt-3 w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={() => onSelectDateIdea(entry.idea)}>
                   Choose this
                 </button>
               </div>
@@ -152,9 +153,9 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
           ) : (
             <div className="rounded-3xl bg-white p-4">
               <p className="text-sm text-slate-500">No matches yet</p>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3 flex gap-2 flex-wrap">
                 <button
-                  className="rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white"
+                  className="w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98] sm:flex-1"
                   type="button"
                   onClick={() => {
                     if (fallbackPick?.idea) {
@@ -167,7 +168,7 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
                   Pick for us anyway
                 </button>
                 <button
-                  className="rounded-2xl bg-canvas px-3 py-3 text-sm font-medium text-slate-700"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98] sm:flex-1"
                   type="button"
                   onClick={() => {
                     setDateFilters({ budget: 'Any', duration: 'Any', category: 'Any' })
@@ -188,7 +189,7 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
             Starter ideas are ready so this never starts blank.
           </div>
         ) : null}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <select className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-700" value={browseCategory} onChange={(event) => setBrowseCategory(event.target.value)}>
             {['Any', ...DATE_CATEGORY_OPTIONS].map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -212,16 +213,23 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
                     <span key={`${idea.id}:${item}`} className="rounded-full bg-white px-3 py-1">{item}</span>
                   ))}
                 </div>
-                <button className="mt-3 rounded-2xl bg-white px-3 py-2 text-sm font-medium text-slate-700" type="button" onClick={() => onSelectDateIdea(idea)}>
+                <button className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onSelectDateIdea(idea)}>
                   Choose this
                 </button>
               </div>
             ))
           ) : (
-            <p className="text-sm text-slate-500">No saved ideas yet.</p>
+            <div className="rounded-3xl bg-white p-4 text-sm text-slate-500">
+              <p>No ideas yet.</p>
+              <button className="mt-3 w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateIdeaModal}>
+                Add idea
+              </button>
+            </div>
           )}
         </div>
       </SectionCard>
+        </div>
+      </div>
     </div>
   )
 }

@@ -11,8 +11,8 @@ export function GoalSettingsModal({ config, onClose, onSave, busy = false }) {
   }
 
   return (
-    <section className="fixed inset-0 z-50 bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={busy ? undefined : onClose}>
-      <form className="mx-auto max-w-md rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={busy ? undefined : onClose}>
+      <form className="w-full max-w-md rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
         <h2 className="text-xl font-semibold text-ink">{config.title}</h2>
         <p className="mt-2 text-sm text-slate-600">{config.description}</p>
 
