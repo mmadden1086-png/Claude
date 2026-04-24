@@ -977,13 +977,14 @@ function App() {
   async function handleWeeklyReassign(task) {
     if (!currentUser) return
     const nextAssignee = task.assignedTo === currentUser.id ? partner.id : currentUser.id
+    const snapshot = { ...task }
 
     await runTaskMutation('reassign', task, async () => {
       await actions.updateTask(task.id, {
         assignedTo: nextAssignee,
         history: appendHistory(task, 'reassigned', currentUser.id, { assignedTo: nextAssignee }),
       })
-      addToast(`Reassigned to ${nextAssignee === currentUser.id ? currentUser.name : partner.name}`, null)
+      addToast(`Reassigned to ${nextAssignee === currentUser.id ? currentUser.name : partner.name}`, async () => restoreSnapshot(task.id, snapshot))
     })
   }
 

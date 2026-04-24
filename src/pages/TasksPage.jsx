@@ -116,6 +116,9 @@ export function TasksPage({
     [searchQuery, sections?.draggingTasks, selection],
   )
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
+  const totalOpenCount = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
+  const filterLabel = FILTERS.find((filter) => filter.id === filterId)?.label ?? 'current'
+  const noFilterMatches = !searchQuery && filterId !== 'all' && activeCount === 0 && totalOpenCount > 0
   const draggingCount = visibleDraggingTasks.length
   const shouldAutoExpandUtilities = draggingCount > 0 || filteredTasks.some((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED)
   const utilitiesVisible = utilitiesOpen || (shouldAutoExpandUtilities && !utilitiesDismissed)
@@ -356,12 +359,23 @@ export function TasksPage({
             ) : (
               <div className="rounded-[1.75rem] border border-white/70 bg-panel/95 p-4 text-sm text-slate-500 shadow-card">
                 <p>
-                  {searchQuery
-                    ? 'No matching tasks.'
-                    : quickActionMode !== 'normal'
-                      ? 'No tasks match this quick action view.'
-                      : `Nothing in ${SEGMENTS.find((segment) => segment.id === activeSegment)?.label.toLowerCase()} right now.`}
+                  {noFilterMatches
+                    ? `No tasks match ${filterLabel} filter.`
+                    : searchQuery
+                      ? 'No matching tasks.'
+                      : quickActionMode !== 'normal'
+                        ? 'No tasks match this quick action view.'
+                        : `Nothing in ${SEGMENTS.find((segment) => segment.id === activeSegment)?.label.toLowerCase()} right now.`}
                 </p>
+                {noFilterMatches ? (
+                  <button
+                    className="mt-3 text-sm font-semibold text-accent underline-offset-4 transition hover:underline"
+                    type="button"
+                    onClick={() => setFilterId('all')}
+                  >
+                    Clear filter
+                  </button>
+                ) : null}
                 {quickActionMode !== 'normal' ? (
                   <button
                     className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition duration-150 active:scale-[0.98]"
