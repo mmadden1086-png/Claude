@@ -64,16 +64,16 @@ export function MenuPage({
         </button>
       </SectionCard>
 
-      <SectionCard title="Notifications" subtitle="Push is wired through Firebase Messaging.">
+      <SectionCard title="Notifications" subtitle="Get reminders for upcoming tasks and daily summaries.">
         <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-semibold text-slate-700" type="button" onClick={onEnableNotifications}>
           <span className="inline-flex items-center gap-2">
             <Bell size={16} /> {notificationStatus === 'enabled' ? 'Notifications on' : notificationStatus === 'working' ? 'Checking...' : 'Enable notifications'}
           </span>
         </button>
         <div className="mt-3 space-y-3 text-sm text-slate-600">
-          <div className="rounded-3xl bg-canvas p-4">Push: assigned task, due soon, morning digest, evening wrap-up.</div>
-          <div className="rounded-3xl bg-canvas p-4">SMS: planned for high-reliability alerts.</div>
-          <div className="rounded-3xl bg-canvas p-4">Email: planned for morning and evening summaries.</div>
+          <div className="rounded-3xl bg-canvas p-4">Push alerts: assigned tasks, due-soon reminders, morning check-in, evening wrap-up.</div>
+          <div className="rounded-3xl bg-canvas p-4">SMS: coming soon — high-reliability alerts for time-sensitive tasks.</div>
+          <div className="rounded-3xl bg-canvas p-4">Email: coming soon — morning and evening summaries.</div>
         </div>
       </SectionCard>
 
