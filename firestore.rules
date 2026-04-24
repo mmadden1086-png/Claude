@@ -20,7 +20,19 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.requestedBy == request.auth.uid;
       allow update: if signedIn() && isTaskParticipant(resource.data);
-      allow delete: if false;
+      allow delete: if signedIn() && isTaskParticipant(resource.data);
+    }
+
+    match /dateIdeas/{ideaId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if signedIn();
+    }
+
+    match /dateHistory/{entryId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if signedIn();
     }
   }
 }

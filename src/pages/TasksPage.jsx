@@ -6,7 +6,6 @@ import { QuickAddCard } from '../components/QuickAddCard'
 import { TaskCard } from '../components/TaskCard'
 import { FILTERS, TASK_STATUS } from '../lib/constants'
 import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from '../lib/format'
-import { sortTasks } from '../lib/task-utils'
 import { PageHeader } from './PageHeader'
 
 const SEGMENTS = [
@@ -51,37 +50,8 @@ function isTodayBucketTask(task) {
   return false
 }
 
-function groupTasks(tasks, currentUserId, lowEnergyMode) {
-  const activeTasks = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED)
-  const snoozedTasks = activeTasks.filter((task) => isSnoozed(task))
-  const unsnoozedTasks = activeTasks.filter((task) => !isSnoozed(task))
-  const todayTasks = unsnoozedTasks.filter(isTodayBucketTask)
-  const upcomingTasks = unsnoozedTasks.filter((task) => !todayTasks.includes(task) && dueWithinDays(task, 7))
-  const backlogTasks = unsnoozedTasks.filter((task) => !todayTasks.includes(task) && !upcomingTasks.includes(task))
-
-  return {
-    all: sortTasks(activeTasks, currentUserId, lowEnergyMode),
-    today: sortTasks(todayTasks, currentUserId, lowEnergyMode),
-    upcoming: sortTasks(upcomingTasks, currentUserId, lowEnergyMode),
-    backlog: sortTasks(backlogTasks, currentUserId, lowEnergyMode),
-    snoozed: sortTasks(snoozedTasks, currentUserId, lowEnergyMode),
-  }
-}
-
-function upcomingSevenDays(tasks) {
-  return tasks
-    .filter((task) => {
-      if (getTaskStatus(task) === TASK_STATUS.COMPLETED || task.isMissed || isSnoozed(task)) return false
-      const dueDate = toDate(task.dueDate)
-      if (!dueDate) return false
-      const days = differenceInCalendarDays(dueDate, new Date())
-      return days >= 0 && days <= 7
-    })
-    .sort((a, b) => (toDate(a.dueDate)?.getTime() ?? Infinity) - (toDate(b.dueDate)?.getTime() ?? Infinity))
-    .slice(0, 4)
-}
-
 export function TasksPage({
+  selection,
   sections,
   filteredTasks,
   currentUser,
@@ -110,8 +80,25 @@ export function TasksPage({
   })
   const [searchQuery, setSearchQuery] = useState('')
   const [isSubmittingInline, setIsSubmittingInline] = useState(false)
-  const groupedTasks = useMemo(() => groupTasks(filteredTasks, currentUser.id, false), [currentUser.id, filteredTasks])
-  const upcomingTasks = useMemo(() => sections?.dueSoonTasks?.length ? sections.dueSoonTasks : upcomingSevenDays(filteredTasks), [filteredTasks, sections])
+  const allSorted = useMemo(() => selection?.allSorted ?? [], [selection])
+  const snoozedTasks = useMemo(
+    () => filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && isSnoozed(task)),
+    [filteredTasks],
+  )
+  const groupedTasks = useMemo(() => {
+    const today = allSorted.filter(isTodayBucketTask)
+    const upcoming = allSorted.filter((task) => !today.some((candidate) => candidate.id === task.id) && dueWithinDays(task, 7))
+    const backlog = allSorted.filter((task) => !today.some((candidate) => candidate.id === task.id) && !upcoming.some((candidate) => candidate.id === task.id))
+
+    return {
+      all: allSorted,
+      today,
+      upcoming,
+      backlog,
+      snoozed: snoozedTasks,
+    }
+  }, [allSorted, snoozedTasks])
+  const upcomingTasks = useMemo(() => selection?.upcoming ?? sections?.dueSoonTasks ?? [], [sections, selection])
   const allVisibleTasks = useMemo(
     () => (groupedTasks.all ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
     [groupedTasks.all, searchQuery],
@@ -125,8 +112,8 @@ export function TasksPage({
     [searchQuery, upcomingTasks],
   )
   const visibleDraggingTasks = useMemo(
-    () => (sections?.draggingTasks ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
-    [searchQuery, sections?.draggingTasks],
+    () => (selection?.dragging ?? sections?.draggingTasks ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
+    [searchQuery, sections?.draggingTasks, selection],
   )
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const draggingCount = visibleDraggingTasks.length

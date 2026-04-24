@@ -23,7 +23,7 @@ function matchesIdeaSearch(idea, query) {
   return haystack.includes(normalizedQuery)
 }
 
-export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpenDateIdeaModal, onSelectDateIdea }) {
+export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpenDateIdeaModal, onSelectDateIdea, onCancelPlannedDate }) {
   const [dateFilters, setDateFilters] = useState({
     budget: 'Any',
     duration: 'Any',
@@ -86,6 +86,15 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
           >
             Pick for us
           </button>
+          {monthlyDateStatus.status === 'planned' && monthlyDateStatus.plannedTask ? (
+            <button
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
+              type="button"
+              onClick={() => onCancelPlannedDate?.(monthlyDateStatus.plannedTask)}
+            >
+              Cancel date
+            </button>
+          ) : null}
         </div>
       </SectionCard>
 

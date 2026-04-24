@@ -34,6 +34,7 @@ import { useNotifications } from './hooks/use-notifications'
 import { useSharedData } from './hooks/use-shared-data'
 import { appendHistory, computeStats, createTaskPayload, deriveSections, getBannerMessage, getPointsForTask, sortTasks } from './lib/task-utils'
 import { detectDuplicateTask, getSmartRetryDate } from './lib/task-decision'
+import { selectTasks } from './lib/taskSelector'
 import { advanceRepeatingTask, shouldAdvanceRepeat } from './lib/task-state'
 
 const FILTER_STORAGE_KEY = 'follow-through-filter'
@@ -241,9 +242,23 @@ function App() {
   const dateReminderState = useRef(readDateReminderState())
 
   const deferredTasks = useDeferredValue(tasks)
-  const filteredTasks = currentUser ? applyFilter(deferredTasks, filterId, currentUser) : []
+  const filteredTasks = useMemo(
+    () => (currentUser ? applyFilter(deferredTasks, filterId, currentUser) : []),
+    [currentUser, deferredTasks, filterId],
+  )
   const goals = currentUser?.goals ?? DEFAULT_USER_GOALS
-  const sections = currentUser ? deriveSections(filteredTasks, currentUser.id, lowEnergyMode, goals) : null
+  const selection = useMemo(
+    () => (currentUser
+      ? selectTasks({
+          tasks: filteredTasks.filter((task) => !task.isMissed),
+          currentUserId: currentUser.id,
+          lowEnergyMode,
+          now: Date.now(),
+        })
+      : null),
+    [currentUser, filteredTasks, lowEnergyMode],
+  )
+  const sections = currentUser ? deriveSections(filteredTasks, currentUser.id, lowEnergyMode, goals, selection) : null
   const stats = useMemo(() => computeStats(tasks), [tasks])
   const goalProgress = getGoalProgress(stats, goals)
   const focusGoalMessage = getFocusGoalMessage(stats, goals)
@@ -450,6 +465,8 @@ function App() {
       await actions.createDateIdea(createDateIdeaPayload(form))
       setDateIdeaModalOpen(false)
       addToast('Date idea saved', null)
+    } catch {
+      addToast('Could not save date idea', null)
     } finally {
       setDateIdeaSaveBusy(false)
     }
@@ -508,7 +525,7 @@ function App() {
       await actions.deleteTask(task.id)
     })
     clearDateReminderEntry(task.id)
-    addToast('Date task cancelled', null)
+    addToast('Date cancelled', null)
   }
 
   function handleStartHere() {
@@ -1165,6 +1182,7 @@ function App() {
     topDateIdeas,
     dateNightSummary,
     monthlyDateStatus,
+    selection,
     sections,
     currentUser,
     partner,
@@ -1188,6 +1206,7 @@ function App() {
     onOpenGoalEditor: (goalKey) => setGoalEditor({ key: goalKey }),
     onOpenDateIdeaModal: () => setDateIdeaModalOpen(true),
     onOpenDateNight: () => navigate('/dates'),
+    onCancelPlannedDate: handleCancelDateTask,
     onStartHere: handleStartHere,
     onQuickAdd: handleQuickAdd,
     onCreateDateIdea: handleCreateDateIdea,

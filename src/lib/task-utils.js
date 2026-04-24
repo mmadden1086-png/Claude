@@ -17,6 +17,7 @@ import {
 } from './constants'
 import { getTaskStatus, isOverdue, isSnoozed, toDate } from './format'
 import { createBreakdownTask, deriveDoThisNextSignals, getDoThisNextMessage, getDraggingTasks, getPriorityScore, getQuickWins, getRepeatCandidates, getScoredOpenTasks, getTaskHealth, getUpcomingTasks, selectDoThisNextTask } from './task-decision'
+import { selectTasks } from './taskSelector'
 import { computeNextRepeatDate } from './task-state'
 
 export function inferClarity(title, existingClarity) {
@@ -52,11 +53,12 @@ export function scoreTask(task, currentUserId, lowEnergyMode) {
 }
 
 export function sortTasks(tasks, currentUserId, lowEnergyMode) {
-  return [...tasks].sort((a, b) => {
-    const scoreDelta = scoreTask(b, currentUserId, lowEnergyMode) - scoreTask(a, currentUserId, lowEnergyMode)
-    if (scoreDelta !== 0) return scoreDelta
-    return (toDate(a.dueDate)?.getTime() ?? Infinity) - (toDate(b.dueDate)?.getTime() ?? Infinity)
-  })
+  return selectTasks({
+    tasks,
+    currentUserId,
+    lowEnergyMode,
+    now: Date.now(),
+  }).allSorted
 }
 
 export function shouldShowExpectationCheck(task) {
@@ -116,13 +118,21 @@ export function createTaskPayload(form, currentUser) {
   }
 }
 
-export function deriveSections(tasks, currentUserId, lowEnergyMode, goals) {
+export function deriveSections(tasks, currentUserId, lowEnergyMode, goals, selection = null) {
   const active = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && !task.isMissed)
   const completed = tasks.filter((task) => getTaskStatus(task) === TASK_STATUS.COMPLETED)
   const missed = tasks.filter((task) => task.isMissed)
   const now = new Date()
 
-  const sorted = getScoredOpenTasks(active, currentUserId, { now, lowEnergy: lowEnergyMode })
+  const normalizedSelection = selection ?? selectTasks({
+    tasks: active,
+    currentUserId,
+    lowEnergyMode,
+    now,
+  })
+  const sorted = normalizedSelection.allSorted?.length
+    ? normalizedSelection.allSorted
+    : getScoredOpenTasks(active, currentUserId, { now, lowEnergy: lowEnergyMode })
   const unsnoozed = sorted.filter((task) => !isSnoozed(task))
   const visibleActive = lowEnergyMode ? unsnoozed.filter((task) => task.effort !== 'Heavy') : unsnoozed
   const recentlyHandled = completed
@@ -130,16 +140,18 @@ export function deriveSections(tasks, currentUserId, lowEnergyMode, goals) {
     .sort((a, b) => (toDate(b.completedAt)?.getTime() ?? 0) - (toDate(a.completedAt)?.getTime() ?? 0))
     .slice(0, 4)
   const goalSignals = deriveDoThisNextSignals(tasks, goals)
-  const doThisNext = selectDoThisNextTask(tasks, currentUserId, { lowEnergyMode, goals, goalSignals })
+  const doThisNext = normalizedSelection.focus ?? selectDoThisNextTask(tasks, currentUserId, { lowEnergyMode, goals, goalSignals })
   const focusTask = doThisNext ? createBreakdownTask(doThisNext) ?? doThisNext : null
   const renderedTaskIds = new Set()
   if (doThisNext?.id) renderedTaskIds.add(doThisNext.id)
   if (focusTask?.parentTaskId) renderedTaskIds.add(focusTask.parentTaskId)
   if (focusTask?.id && !String(focusTask.id).startsWith('breakdown:')) renderedTaskIds.add(focusTask.id)
 
-  const draggingTasks = getDraggingTasks(tasks, currentUserId, { lowEnergyMode, now, excludeIds: renderedTaskIds })
+  const draggingTasks = (normalizedSelection.dragging ?? getDraggingTasks(tasks, currentUserId, { lowEnergyMode, now, excludeIds: renderedTaskIds }))
+    .filter((task) => !renderedTaskIds.has(task.id))
   draggingTasks.forEach((task) => renderedTaskIds.add(task.id))
-  const upcomingTasks = getUpcomingTasks(tasks, currentUserId, { now, excludeIds: renderedTaskIds })
+  const upcomingTasks = (normalizedSelection.upcoming ?? getUpcomingTasks(tasks, currentUserId, { now, excludeIds: renderedTaskIds }))
+    .filter((task) => !renderedTaskIds.has(task.id))
   upcomingTasks.forEach((task) => renderedTaskIds.add(task.id))
   const repeatSuggestions = getRepeatCandidates(tasks)
   const quickWinTasks = getQuickWins(tasks, currentUserId, { lowEnergyMode, now, excludeIds: renderedTaskIds })
