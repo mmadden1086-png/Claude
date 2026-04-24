@@ -169,6 +169,9 @@ export function TaskCard({
           {focusBadge ? (
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-accent">{focusBadge}</p>
           ) : null}
+          {task._surfaceReason ? (
+            <p className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent">{task._surfaceReason}</p>
+          ) : null}
           <h2 className="text-[1.8rem] font-semibold leading-tight text-ink">{task.title}</h2>
           {impactMessage ? <p className="text-sm leading-6 text-slate-600">{impactMessage}</p> : null}
           {task.dueTime || task.dueDate ? <p className="text-sm font-medium text-slate-500">{formatDueContext(task)}</p> : null}

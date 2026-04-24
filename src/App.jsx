@@ -34,7 +34,7 @@ import { useNotifications } from './hooks/use-notifications'
 import { useSharedData } from './hooks/use-shared-data'
 import { appendHistory, computeStats, createTaskPayload, deriveSections, getBannerMessage, getPointsForTask, sortTasks } from './lib/task-utils'
 import { detectDuplicateTask, getSmartRetryDate } from './lib/task-decision'
-import { selectTasks } from './lib/taskSelector'
+import { selectTaskViews } from './lib/selection'
 import { advanceRepeatingTask, shouldAdvanceRepeat } from './lib/task-state'
 
 const FILTER_STORAGE_KEY = 'follow-through-filter'
@@ -249,7 +249,7 @@ function App() {
   const goals = currentUser?.goals ?? DEFAULT_USER_GOALS
   const selection = useMemo(
     () => (currentUser
-      ? selectTasks({
+      ? selectTaskViews({
           tasks: filteredTasks.filter((task) => !task.isMissed),
           currentUserId: currentUser.id,
           lowEnergyMode,
@@ -441,13 +441,11 @@ function App() {
 
     try {
       const payload = createTaskPayload(form, currentUser)
-      const duplicateTask = detectDuplicateTask(tasks, payload)
-      if (duplicateTask) {
-        setDuplicatePrompt({ mode: 'create', payload, duplicateTask })
+      const result = await actions.createTaskSafe?.(payload, tasks)
+      if (result?.blocked && result.duplicateTask) {
+        setDuplicatePrompt({ mode: 'create', payload, duplicateTask: result.duplicateTask })
         return { blocked: true }
       }
-
-      await actions.createTask(payload)
       setQuickAddExpanded(false)
       addToast('Task saved', null)
       return { blocked: false }
@@ -497,7 +495,12 @@ function App() {
 
   async function handleCreateDateTask(idea, options = {}) {
     if (!currentUser) return
-    await actions.createTask(createTaskPayload(buildDateTask(idea, currentUser, options), currentUser))
+    const payload = createTaskPayload(buildDateTask(idea, currentUser, options), currentUser)
+    const result = await actions.createTaskSafe?.(payload, tasks)
+    if (result?.blocked) {
+      setDuplicatePrompt({ mode: 'create', payload, duplicateTask: result.duplicateTask })
+      return
+    }
     setSelectedDateIdea(null)
     addToast(`Date task added for ${idea.title}`, null)
   }

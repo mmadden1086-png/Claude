@@ -17,7 +17,7 @@ import {
 } from './constants'
 import { getTaskStatus, isOverdue, isSnoozed, toDate } from './format'
 import { createBreakdownTask, deriveDoThisNextSignals, getDoThisNextMessage, getDraggingTasks, getPriorityScore, getQuickWins, getRepeatCandidates, getScoredOpenTasks, getTaskHealth, getUpcomingTasks, selectDoThisNextTask } from './task-decision'
-import { selectTasks } from './taskSelector'
+import { selectTasks } from './selection'
 import { computeNextRepeatDate } from './task-state'
 
 export function inferClarity(title, existingClarity) {
@@ -147,7 +147,7 @@ export function deriveSections(tasks, currentUserId, lowEnergyMode, goals, selec
   if (focusTask?.parentTaskId) renderedTaskIds.add(focusTask.parentTaskId)
   if (focusTask?.id && !String(focusTask.id).startsWith('breakdown:')) renderedTaskIds.add(focusTask.id)
 
-  const draggingTasks = (normalizedSelection.dragging ?? getDraggingTasks(tasks, currentUserId, { lowEnergyMode, now, excludeIds: renderedTaskIds }))
+  const draggingTasks = (normalizedSelection.checkIn ?? normalizedSelection.dragging ?? getDraggingTasks(tasks, currentUserId, { lowEnergyMode, now, excludeIds: renderedTaskIds }))
     .filter((task) => !renderedTaskIds.has(task.id))
   draggingTasks.forEach((task) => renderedTaskIds.add(task.id))
   const upcomingTasks = (normalizedSelection.upcoming ?? getUpcomingTasks(tasks, currentUserId, { now, excludeIds: renderedTaskIds }))

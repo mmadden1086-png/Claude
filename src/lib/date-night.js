@@ -121,6 +121,8 @@ function getRepeatPreferenceBoost(historyMeta) {
 
 function explainWhyFits(idea, filters, historyMeta) {
   if (filters.budget !== 'Any' && filters.duration !== 'Any') return 'Fits your budget and time'
+  if (idea.locationType === 'Home' && idea.duration === '30-60 min') return 'Easy to do at home'
+  if (idea.locationType === 'Either') return 'Flexible and easy to fit in'
   if (historyMeta.rating >= 4) return 'Highly rated and easy to plan'
   if (historyMeta.lastMonthsAgo >= 3 || historyMeta.lastMonthsAgo === Infinity) return "Haven't done this in a while"
   if (filters.category !== 'Any') return `Fits the ${filters.category.toLowerCase()} mood`
@@ -142,10 +144,12 @@ function matchesFilters(idea, filters) {
 
 function enrichIdea(idea, history, filters) {
   const historyMeta = getIdeaHistory(idea, history)
+  const logisticsBoost = idea.locationType === 'Either' ? 6 : idea.locationType ? 3 : 0
   const score =
     getRatingBoost(historyMeta.rating) +
     getUnusedBoost(historyMeta.lastMonthsAgo) +
-    getRepeatPreferenceBoost(historyMeta) -
+    getRepeatPreferenceBoost(historyMeta) +
+    logisticsBoost -
     getRecentPenalty(historyMeta.lastMonthsAgo)
 
   return {

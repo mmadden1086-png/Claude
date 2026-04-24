@@ -29,6 +29,19 @@ const initialState = {
   repeatDays: [],
 }
 
+const SUGGESTION_STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'my', 'our', 'your', 'with', 'on', 'in'])
+
+function hasEnoughSuggestionContext(title = '') {
+  const tokens = title
+    .toLowerCase()
+    .split(/\s+/)
+    .map((token) => token.replace(/[^a-z0-9]/g, ''))
+    .filter(Boolean)
+    .filter((token) => !SUGGESTION_STOP_WORDS.has(token))
+
+  return tokens.length >= 2
+}
+
 function mostCommon(values = [], fallback) {
   const buckets = values.filter(Boolean).reduce((accumulator, value) => {
     accumulator[value] = (accumulator[value] ?? 0) + 1
@@ -105,10 +118,11 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      if (!form.title.trim()) {
+      if (!form.title.trim() || !hasEnoughSuggestionContext(form.title)) {
         setDoneSuggestion('')
         setWhySuggestion('')
         if (!whyTouched) {
+          setForm((current) => (current.whyThisMatters.trim() && !whyIsSuggested ? current : { ...current, whyThisMatters: '' }))
           setWhyIsSuggested(false)
         }
         return
@@ -153,7 +167,7 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
         setForm((current) => (current.whyThisMatters.trim() ? { ...current, whyThisMatters: '' } : current))
         setWhyIsSuggested(false)
       }
-    }, 300)
+    }, 250)
 
     return () => window.clearTimeout(timeoutId)
   }, [currentUser, form, tasks, usersById, whyIsSuggested, whySeed, whyTouched])

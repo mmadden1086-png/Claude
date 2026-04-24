@@ -147,7 +147,7 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
                 <div>
                   <p className="font-medium text-ink">{entry.idea.title}</p>
                   <p className="mt-1 text-sm text-slate-600">{entry.idea.description || 'Simple idea ready when you are.'}</p>
-                  <p className="mt-2 text-xs text-slate-500">{[entry.idea.category, entry.idea.budgetLevel, entry.idea.duration].filter(Boolean).join(' - ')}</p>
+                  <p className="mt-2 text-xs text-slate-500">{[entry.idea.category, entry.idea.budgetLevel, entry.idea.duration, entry.idea.locationType].filter(Boolean).join(' - ')}</p>
                   <p className="mt-2 text-sm text-slate-600">{entry.whyFits}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {index === 0 ? <p className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">Best choice</p> : null}
@@ -229,10 +229,34 @@ export function DateNightPage({ dateIdeas, dateHistory, monthlyDateStatus, onOpe
             ))
           ) : (
             <div className="rounded-3xl bg-white p-4 text-sm text-slate-500">
-              <p>No ideas yet.</p>
-              <button className="mt-3 w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateIdeaModal}>
-                Add idea
-              </button>
+              {ideaPool.length ? (
+                <>
+                  <p>No matches yet.</p>
+                  <div className="mt-3 flex gap-2 flex-wrap">
+                    <button
+                      className="w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98] sm:flex-1"
+                      type="button"
+                      onClick={() => {
+                        setBrowseCategory('Any')
+                        setBrowseBudget('Any')
+                        setSearchQuery('')
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                    <button className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98] sm:flex-1" type="button" onClick={onOpenDateIdeaModal}>
+                      Add idea
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p>No ideas yet.</p>
+                  <button className="mt-3 w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateIdeaModal}>
+                    Add idea
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

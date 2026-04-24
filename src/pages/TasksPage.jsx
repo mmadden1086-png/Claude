@@ -112,7 +112,7 @@ export function TasksPage({
     [searchQuery, upcomingTasks],
   )
   const visibleDraggingTasks = useMemo(
-    () => (selection?.dragging ?? sections?.draggingTasks ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
+    () => (selection?.checkIn ?? selection?.dragging ?? sections?.draggingTasks ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
     [searchQuery, sections?.draggingTasks, selection],
   )
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
@@ -122,23 +122,11 @@ export function TasksPage({
   const utilitiesSummaryLabel = draggingCount > 0
     ? `${draggingCount} need attention`
     : `${visibleUpcomingTasks.length} coming up`
-  const renderedUtilityIds = useMemo(() => {
-    if (!utilitiesVisible) return new Set()
-    return new Set([...visibleDraggingTasks.map((task) => task.id), ...visibleUpcomingTasks.map((task) => task.id)])
-  }, [utilitiesVisible, visibleDraggingTasks, visibleUpcomingTasks])
-  const dedupedVisibleTasks = useMemo(
-    () => visibleTasks.filter((task) => !renderedUtilityIds.has(task.id)),
-    [renderedUtilityIds, visibleTasks],
-  )
-  const dedupedAllVisibleTasks = useMemo(
-    () => allVisibleTasks.filter((task) => !renderedUtilityIds.has(task.id)),
-    [allVisibleTasks, renderedUtilityIds],
-  )
   const displayTasks = useMemo(() => {
-    if (quickActionMode === 'top3') return dedupedAllVisibleTasks.slice(0, 3)
-    if (quickActionMode === 'simplify') return dedupedAllVisibleTasks.slice(0, 1)
-    return dedupedVisibleTasks
-  }, [dedupedAllVisibleTasks, dedupedVisibleTasks, quickActionMode])
+    if (quickActionMode === 'top3') return allVisibleTasks.slice(0, 3)
+    if (quickActionMode === 'simplify') return allVisibleTasks.slice(0, 1)
+    return visibleTasks
+  }, [allVisibleTasks, quickActionMode, visibleTasks])
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -212,9 +200,6 @@ export function TasksPage({
               type="search"
               placeholder="Add or find a task"
               value={searchQuery}
-              onFocus={() => {
-                if (!searchQuery.trim()) setQuickAddExpanded(true)
-              }}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={handleInlineSubmit}
             />
@@ -222,7 +207,11 @@ export function TasksPage({
               <button className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={() => setSearchQuery('')}>
                 Clear
               </button>
-            ) : null}
+            ) : (
+              <button className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={() => setQuickAddExpanded(true)}>
+                Add
+              </button>
+            )}
           </label>
 
           <div className="grid grid-cols-5 gap-1 rounded-3xl bg-white p-1 shadow-sm">
@@ -292,6 +281,7 @@ export function TasksPage({
                               <button className="text-left font-medium text-ink" type="button" onClick={() => onOpenTask(task.id)}>
                                 {task.title}
                               </button>
+                              {task._surfaceReason ? <p className="mt-1 text-xs text-slate-500">{task._surfaceReason}</p> : null}
                               <div className="mt-3 flex gap-2 flex-wrap text-xs">
                                 <button className="rounded-2xl bg-white px-3 py-2 text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onTaskAction('reschedule', task)}>
                                   Reschedule

@@ -17,6 +17,19 @@ import { generateDoneSuggestion, saveDonePattern } from '../lib/suggestionEngine
 import { buildRepeatPreview } from '../lib/task-utils'
 import { getWhyDisplayDecision } from '../lib/why-strength'
 
+const SUGGESTION_STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'my', 'our', 'your', 'with', 'on', 'in'])
+
+function hasEnoughSuggestionContext(title = '') {
+  const tokens = title
+    .toLowerCase()
+    .split(/\s+/)
+    .map((token) => token.replace(/[^a-z0-9]/g, ''))
+    .filter(Boolean)
+    .filter((token) => !SUGGESTION_STOP_WORDS.has(token))
+
+  return tokens.length >= 2
+}
+
 function toDateInput(value) {
   const date = toDate(value)
   if (!date) return ''
@@ -77,7 +90,7 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      if (!form.title.trim()) {
+      if (!form.title.trim() || !hasEnoughSuggestionContext(form.title)) {
         setDoneSuggestion('')
         setWhySuggestion('')
         return
@@ -123,7 +136,7 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
         setForm((current) => (current.whyThisMatters.trim() ? { ...current, whyThisMatters: '' } : current))
         setWhyIsSuggested(false)
       }
-    }, 300)
+    }, 250)
 
     return () => window.clearTimeout(timeoutId)
   }, [
@@ -543,17 +556,17 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
             </div>
           ) : null}
 
-          <div className="flex gap-3">
-            <button className="flex-1 rounded-3xl bg-ink px-4 py-4 font-semibold text-white" type="submit">
-              Save changes
-            </button>
-            <button className="rounded-3xl bg-white px-5 py-4 font-medium text-slate-700" type="button" onClick={() => setIsEditing(false)}>
-              Back
-            </button>
-            <button className="rounded-3xl bg-white px-5 py-4 font-medium text-slate-700" type="button" onClick={onClose}>
-              Cancel
-            </button>
-          </div>
+            <div className="flex flex-wrap gap-3">
+              <button className="min-w-[10rem] flex-1 rounded-3xl bg-ink px-4 py-4 font-semibold text-white" type="submit">
+                Save changes
+              </button>
+              <button className="min-w-[8rem] flex-1 rounded-3xl bg-white px-5 py-4 font-medium text-slate-700 sm:flex-none" type="button" onClick={() => setIsEditing(false)}>
+                Back
+              </button>
+              <button className="min-w-[8rem] flex-1 rounded-3xl bg-white px-5 py-4 font-medium text-slate-700 sm:flex-none" type="button" onClick={onClose}>
+                Cancel
+              </button>
+            </div>
 
           <button
             className="w-full rounded-3xl bg-danger/10 px-4 py-4 text-sm font-semibold text-danger transition duration-150 active:scale-[0.99] active:opacity-80"

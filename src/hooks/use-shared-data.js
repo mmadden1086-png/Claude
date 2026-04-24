@@ -5,6 +5,7 @@ import {
   createDateHistory,
   createDateIdea,
   createTask,
+  createTaskSafe,
   deleteTask,
   restoreTask,
   subscribeToDateHistory,
@@ -150,6 +151,12 @@ export function useSharedData(currentUser) {
         if (canUseFirebase()) {
           await createTask(payload)
           return
+        }
+        throw new Error('Firebase is not configured yet.')
+      },
+      async createTaskSafe(payload, existingTasks) {
+        if (canUseFirebase()) {
+          return createTaskSafe(payload, existingTasks)
         }
         throw new Error('Firebase is not configured yet.')
       },

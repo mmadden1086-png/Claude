@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore'
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { auth, db, hasFirebaseConfig } from './firebase'
+import { detectDuplicateTask } from './task-decision'
 
 const usersCollection = db ? collection(db, 'users') : null
 const tasksCollection = db ? collection(db, 'tasks') : null
@@ -137,6 +138,27 @@ export async function createTask(payload) {
     createdAt: serverTimestamp(),
     lastActionAt: serverTimestamp(),
   })
+}
+
+export async function createTaskSafe(payload, existingTasks = []) {
+  const nextPayload = {
+    ...payload,
+    clientRequestId: payload.clientRequestId || crypto.randomUUID(),
+  }
+  const duplicateTask = detectDuplicateTask(existingTasks, nextPayload)
+  if (duplicateTask) {
+    return {
+      blocked: true,
+      duplicateTask,
+      payload: nextPayload,
+    }
+  }
+
+  await createTask(nextPayload)
+  return {
+    blocked: false,
+    payload: nextPayload,
+  }
 }
 
 export async function updateTask(taskId, updates) {
