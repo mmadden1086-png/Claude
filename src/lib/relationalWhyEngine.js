@@ -1,28 +1,7 @@
-import { enforceQuality, hasEnoughContent, isGeneric } from './suggestionEngine'
+import { hasEnoughContent, isGeneric } from './suggestionEngine'
 
 const WHY_STORAGE_KEY = 'follow-through-why-patterns'
 const STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'in', 'on', 'with', 'my'])
-const OBJECT_STOP_WORDS = new Set([
-  ...STOP_WORDS,
-  'clean',
-  'cleanup',
-  'up',
-  'wash',
-  'make',
-  'put',
-  'away',
-  'take',
-  'get',
-  'do',
-  'fix',
-  'plan',
-  'schedule',
-  'call',
-  'buy',
-  'review',
-  'finish',
-])
-
 const BLOCKED_PATTERNS = [
   'you do not respect',
   "you don't respect",
@@ -35,9 +14,16 @@ const BLOCKED_PATTERNS = [
   'called this out',
   'respect the shared space',
   'helps',
+  'follow-up',
+  'follow up',
+  'followed up',
+  'handled',
+  'managed',
+  'productivity',
   'organized',
   'completed',
   'improves',
+  'does not disappear',
 ]
 
 function canUseStorage() {
@@ -53,25 +39,6 @@ function tokenize(title = '') {
     .filter((token) => !STOP_WORDS.has(token))
 }
 
-function sentenceCase(text = '') {
-  const trimmed = text.replace(/\s+/g, ' ').trim()
-  if (!trimmed) return ''
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
-}
-
-function extractTaskObject(title = '') {
-  const cleaned = title
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter((token) => !OBJECT_STOP_WORDS.has(token))
-    .join(' ')
-
-  return sentenceCase(cleaned || title)
-}
-
 function hasMeaningfulNotes(notes = '') {
   return hasEnoughContent(notes) && !isGeneric(notes)
 }
@@ -85,6 +52,15 @@ function getChildName(task) {
   const text = `${task.title} ${task.notes}`.toLowerCase()
   if (/\bmartin'?s?\b/.test(text)) return 'Martin'
   return 'they'
+}
+
+function getPersonName(task) {
+  const text = `${task.title} ${task.notes}`.toLowerCase()
+  if (/\bmartin'?s?\b/.test(text)) return 'Martin'
+  if (/\bmegan'?s?\b/.test(text)) return 'Megan'
+  if (/\bmatt'?s?\b/.test(text)) return 'Matt'
+  if (/\b(he|him|his|she|her|hers|kid|child|son|daughter)\b/.test(text)) return 'they'
+  return ''
 }
 
 function isSchoolShareContext(task) {
@@ -151,19 +127,6 @@ function limitWords(text = '', maxWords = 30) {
     .join(' ')
 }
 
-function cleanNoteContext(notes = '') {
-  const cleaned = notes.replace(/\s+/g, ' ').trim()
-  if (!cleaned || isBlocked(cleaned)) return ''
-  return cleaned.split(/[.!?]/)[0].split(/\s+/).slice(0, 10).join(' ')
-}
-
-function hasTaskObject(text, taskObject) {
-  const objectTokens = tokenize(taskObject).filter((token) => token.length > 2)
-  if (!objectTokens.length) return false
-  const normalized = text.toLowerCase()
-  return objectTokens.some((token) => normalized.includes(token))
-}
-
 function getLearnedWhy(taskTitle) {
   const titleTokens = tokenize(taskTitle)
   if (!titleTokens.length) return ''
@@ -200,40 +163,83 @@ export function getTaskSource(task, currentUser) {
   return 'self'
 }
 
-function buildWhy(task, context) {
-  const taskObject = extractTaskObject(task.title)
+function hasPhysicalObject(task) {
+  const text = mergedContext(task)
+  return [
+    'bed',
+    'bedroom',
+    'bounce house',
+    'car',
+    'counter',
+    'dish',
+    'dog',
+    'faucet',
+    'garage',
+    'gear',
+    'groceries',
+    'kitchen',
+    'laundry',
+    'room',
+    'sink',
+    'space',
+    'trash',
+    'yard',
+  ].some((keyword) => text.includes(keyword))
+}
+
+function personWhy(task, context) {
   const source = getTaskSource(task, context.currentUser ?? context)
-  const noteContext = cleanNoteContext(task.notes)
+  const personName = getPersonName(task)
 
   if (isSchoolShareContext(task)) {
     const childName = getChildName(task)
-    if (childName === 'Martin') {
-      return "If this isn't ready, he shows up without something to share"
-    }
-    return "If this isn't ready, they show up without something to share"
+    return childName === 'Martin' ? 'So Martin has something to share' : 'So they have something to share'
   }
 
-  if (task.isOverdue) {
-    return `${taskObject} already slipped - leaving it longer makes the next step heavier${noteContext ? `: ${noteContext}` : ''}`
-  }
-
-  if (source === 'requested') {
-    return `${taskObject} is something they are expecting to be handled, not followed up on${noteContext ? `: ${noteContext}` : ''}`
-  }
-
-  if (source === 'anticipated') {
-    return `If ${taskObject.toLowerCase()} slips, it quietly becomes something they deal with${noteContext ? `: ${noteContext}` : ''}`
-  }
-
-  return `${taskObject} does not disappear when ignored - it sits there until you deal with it${noteContext ? `: ${noteContext}` : ''}`
+  if (personName === 'Martin') return "So he's prepared when it matters"
+  if (personName === 'Megan') return "So Megan does not have to deal with it"
+  if (personName === 'Matt') return "So Matt does not have to deal with it"
+  if (personName) return 'So they are prepared when it matters'
+  if (source === 'requested') return 'So they do not have to deal with it'
+  return ''
 }
 
-function finalWhy(result, taskObject, options = {}) {
-  const { requireObject = true } = options
-  const limited = limitWords(result, 30)
+function environmentWhy(task) {
+  const text = mergedContext(task)
+  if (text.includes('bounce house')) return 'Otherwise it just sits out'
+  if (text.includes('kitchen') || text.includes('sink') || text.includes('counter')) return 'So the kitchen stays usable'
+  if (text.includes('garage')) return 'So the garage stays usable'
+  if (text.includes('trash') || text.includes('dog') || text.includes('poop')) return 'Otherwise it just sits there'
+  if (text.includes('faucet') || text.includes('leak')) return 'So the problem does not get worse'
+  if (text.includes('bed') || text.includes('room')) return 'So the room feels usable'
+  return 'So the space stays usable'
+}
+
+function buildUseCaseWhy(task) {
+  const text = mergedContext(task)
+  if (text.includes('appointment') || text.includes('schedule')) return 'So the time is set before it matters'
+  if (text.includes('call')) return 'So the answer is clear when needed'
+  if (text.includes('buy') || text.includes('groceries')) return 'So it is there when needed'
+  if (task.isOverdue) return 'So this stops slipping further'
+  return 'So this is ready when needed'
+}
+
+function buildWhy(task, context) {
+  const personResult = personWhy(task, context)
+  if (personResult) return personResult
+
+  if (hasPhysicalObject(task)) {
+    return environmentWhy(task)
+  }
+
+  return buildUseCaseWhy(task)
+}
+
+function finalWhy(result) {
+  const limited = limitWords(result, 11)
   if (!limited || isBlocked(limited)) return null
-  if (requireObject && !hasTaskObject(limited, taskObject)) return null
-  return enforceQuality(limited)
+  if (limited.split(/[.!?]/).filter(Boolean).length > 1) return null
+  return limited
 }
 
 function fallbackWhy(task) {
@@ -246,7 +252,7 @@ export function isUnsafeWhyText(text = '') {
 }
 
 export function sanitizeWhyText(text = '') {
-  return finalWhy(text, text) ?? ''
+  return finalWhy(text) ?? ''
 }
 
 export function generateRelationalWhy(task, context = {}, usersById = {}, seed = 0) {
@@ -254,21 +260,19 @@ export function generateRelationalWhy(task, context = {}, usersById = {}, seed =
   void usersById
   void seed
 
-  const taskObject = extractTaskObject(task.title)
   const learned = getLearnedWhy(task.title)
-  const learnedFinal = learned && !isBlocked(learned) ? finalWhy(learned, taskObject) : null
+  const learnedFinal = learned && !isBlocked(learned) ? finalWhy(learned) : null
   if (learnedFinal) return learnedFinal
 
-  const firstPass = finalWhy(buildWhy(task, context), taskObject)
+  const firstPass = finalWhy(buildWhy(task, context))
   if (firstPass) return firstPass
 
-  return finalWhy(fallbackWhy(task), taskObject, { requireObject: false }) ?? ''
+  return finalWhy(fallbackWhy(task)) ?? ''
 }
 
 export function saveWhyPattern(taskTitle, whyText) {
   const normalized = tokenize(taskTitle).join(' ')
-  const taskObject = extractTaskObject(taskTitle)
-  const validated = finalWhy(whyText, taskObject)
+  const validated = finalWhy(whyText)
   if (!normalized || !validated) return
 
   const current = getStoredPatterns()
