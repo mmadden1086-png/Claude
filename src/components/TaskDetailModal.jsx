@@ -7,11 +7,12 @@ import {
   CATEGORY_OPTIONS,
   EFFORT_OPTIONS,
   REPEAT_OPTIONS,
+  TASK_STATUS,
   URGENCY_OPTIONS,
   WEEKDAY_OPTIONS,
   getCanonicalUserName,
 } from '../lib/constants'
-import { describeRepeat, formatDueContext, formatStatusLabel, formatTaskAge, normalizeTimeValue, toDate } from '../lib/format'
+import { describeRepeat, formatDueContext, formatStatusLabel, formatTaskAge, getTaskStatus, normalizeTimeValue, toDate } from '../lib/format'
 import { generateRelationalWhy, saveWhyPattern } from '../lib/relationalWhyEngine'
 import { generateDoneSuggestion, saveDonePattern } from '../lib/suggestionEngine'
 import { buildRepeatPreview } from '../lib/task-utils'
@@ -56,7 +57,7 @@ function createFormState(task) {
   }
 }
 
-export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose, onSave, onDelete }) {
+export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose, onSave, onDelete, onAction }) {
   const [form, setForm] = useState(() => createFormState(task))
   const [isEditing, setIsEditing] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -210,6 +211,12 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
     : assigneeOptions.find((user) => user.id === task.assignedTo)?.name ?? 'Unassigned'
   const repeatText = describeRepeat(task)
   const taskAge = formatTaskAge(task)
+  const taskStatus = getTaskStatus(task)
+
+  function handleReadAction(action) {
+    onAction?.(action, task)
+    onClose?.()
+  }
 
   if (!isEditing) {
     return (
@@ -302,11 +309,61 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
               ) : null}
             </div>
 
-            <div className="flex gap-3">
-              <button className="flex-1 rounded-3xl bg-ink px-4 py-4 font-semibold text-white" type="button" onClick={() => setIsEditing(true)}>
+            <div className="flex flex-wrap gap-3">
+              {taskStatus === TASK_STATUS.COMPLETED ? (
+                <button
+                  className="min-w-[10rem] flex-1 rounded-3xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98]"
+                  type="button"
+                  onClick={() => handleReadAction('reopen')}
+                >
+                  Reopen
+                </button>
+              ) : taskStatus === TASK_STATUS.IN_PROGRESS ? (
+                <>
+                  <button
+                    className="min-w-[10rem] flex-1 rounded-3xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98]"
+                    type="button"
+                    onClick={() => handleReadAction('done')}
+                  >
+                    Done
+                  </button>
+                  <button
+                    className="min-w-[8rem] flex-1 rounded-3xl bg-white px-5 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98] sm:flex-none"
+                    type="button"
+                    onClick={() => handleReadAction('snooze')}
+                  >
+                    Snooze
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="min-w-[10rem] flex-1 rounded-3xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98]"
+                    type="button"
+                    onClick={() => handleReadAction('start')}
+                  >
+                    Start
+                  </button>
+                  <button
+                    className="min-w-[8rem] flex-1 rounded-3xl bg-white px-5 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98] sm:flex-none"
+                    type="button"
+                    onClick={() => handleReadAction('done')}
+                  >
+                    Done
+                  </button>
+                  <button
+                    className="min-w-[8rem] flex-1 rounded-3xl bg-white px-5 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98] sm:flex-none"
+                    type="button"
+                    onClick={() => handleReadAction('snooze')}
+                  >
+                    Snooze
+                  </button>
+                </>
+              )}
+              <button className="min-w-[10rem] flex-1 rounded-3xl bg-ink px-4 py-4 font-semibold text-white" type="button" onClick={() => setIsEditing(true)}>
                 Edit task
               </button>
-              <button className="rounded-3xl bg-white px-5 py-4 font-medium text-slate-700" type="button" onClick={onClose}>
+              <button className="min-w-[8rem] flex-1 rounded-3xl bg-white px-5 py-4 font-medium text-slate-700 sm:flex-none" type="button" onClick={onClose}>
                 Close
               </button>
             </div>

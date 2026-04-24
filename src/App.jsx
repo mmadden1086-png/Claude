@@ -1268,6 +1268,7 @@ function App() {
           currentUser={currentUser}
           tasks={tasks}
           onClose={() => setOpenTaskId(null)}
+          onAction={handleTaskAction}
           onSave={(updates) => handleTaskSave(openTask.id, updates)}
           onDelete={({ scope } = {}) => handleDeleteTask(openTask, scope ?? 'single')}
         />
