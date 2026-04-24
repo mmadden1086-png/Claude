@@ -195,7 +195,7 @@ export function TaskCard({
 
       <div className="mt-4 flex flex-col gap-2">
         <button
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98]"
+          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98]"
           type="button"
           onClick={(event) => stopAndRun(event, primaryAction.action)}
         >
@@ -206,7 +206,7 @@ export function TaskCard({
           {secondaryActions.map((item) => (
             <button
               key={item.action}
-              className="flex min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
+              className="flex min-h-[44px] min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
               type="button"
               onClick={(event) => stopAndRun(event, item.action)}
             >

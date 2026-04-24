@@ -3,7 +3,7 @@ import { formatDueContext } from '../lib/format'
 
 export function DuplicateTaskModal({ task, onUpdateExisting, onKeepBoth, onCancel }) {
   return (
-    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onCancel}>
+    <section className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm sm:items-center" onClick={onCancel}>
       <div className="w-full max-w-md rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>

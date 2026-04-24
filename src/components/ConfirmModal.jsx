@@ -12,7 +12,7 @@ export function ConfirmModal({ title, body, actions, onCancel, busy = false }) {
     })
 
   return (
-    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={busy ? undefined : onCancel}>
+    <section className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm sm:items-center" onClick={busy ? undefined : onCancel}>
       <div className="w-full max-w-md rounded-[1.75rem] bg-panel p-6 shadow-card" onClick={(event) => event.stopPropagation()}>
         <h2 className="text-xl font-semibold text-ink">{title}</h2>
         {body ? <p className="mt-3 text-base leading-relaxed text-slate-700">{body}</p> : null}

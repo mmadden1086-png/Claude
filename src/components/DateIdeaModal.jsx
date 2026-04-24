@@ -25,8 +25,8 @@ export function DateIdeaModal({ onClose, onSave, busy = false }) {
   }
 
   return (
-    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={busy ? undefined : onClose}>
-      <form className="max-h-full w-full max-w-lg overflow-y-auto rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
+    <section className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm sm:items-center" onClick={busy ? undefined : onClose}>
+      <form className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
         <h2 className="text-xl font-semibold text-ink">Add date idea</h2>
         <p className="mt-2 text-sm text-slate-600">Save an idea now so it is easy to pull later.</p>
 

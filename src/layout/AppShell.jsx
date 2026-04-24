@@ -16,8 +16,8 @@ const tabs = [
 
 export function AppShell({ pageProps }) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 pb-28 pt-4 sm:px-6 lg:px-8">
-      <div className="min-h-0 flex-1">
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {pageProps.error ? (
           <section className="mb-4 rounded-4xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             Firebase sync issue: {pageProps.error}

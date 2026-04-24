@@ -138,7 +138,7 @@ function ModalTaskRow({ task, subtitle, primaryActionLabel, secondaryActionLabel
         <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
       </button>
       {(onPrimaryAction || onSecondaryAction) ? (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {onPrimaryAction ? (
             <button className="flex-1 rounded-2xl bg-accentSoft px-3 py-2 text-sm font-medium text-accent" type="button" onClick={() => onPrimaryAction(task)}>
               {primaryActionLabel}
@@ -199,8 +199,8 @@ export function StatsDrilldownModal({
   }
 
   return (
-    <section className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
-      <div className="max-h-full w-full max-w-md overflow-y-auto rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
+    <section className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-xl font-semibold text-ink">{titleMap[view?.type] ?? 'Stats'}</h2>
           <button className="rounded-full bg-white p-3 text-slate-600" type="button" onClick={onClose}>
