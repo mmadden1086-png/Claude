@@ -80,8 +80,17 @@ function findCurrentUser(sessionUser, users) {
     pushToken: existing?.pushToken ?? '',
     totalPoints: existing?.totalPoints ?? 0,
     weeklyPoints: existing?.weeklyPoints ?? 0,
+    lastCheckInAt: existing?.lastCheckInAt ?? null,
     goals,
   }
+}
+
+function toDateInputValue(value = new Date()) {
+  const date = toDate(value) ?? new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function applyFilter(tasks, filterId, currentUser) {
@@ -215,6 +224,7 @@ function App() {
     return window.localStorage.getItem(LOW_ENERGY_STORAGE_KEY) === 'true'
   })
   const [quickAddExpanded, setQuickAddExpanded] = useState(false)
+  const [quickAddDefaults, setQuickAddDefaults] = useState({})
   const [toasts, setToasts] = useState([])
   const [snoozePreset, setSnoozePreset] = useState(() => {
     if (typeof window === 'undefined') return 'tomorrow'
@@ -236,6 +246,9 @@ function App() {
   const [selectedDateIdea, setSelectedDateIdea] = useState(null)
   const [dateReminderPrompt, setDateReminderPrompt] = useState(null)
   const [dateMorningPrompt, setDateMorningPrompt] = useState(null)
+  const [checkInConversationPrompt, setCheckInConversationPrompt] = useState(false)
+  const [checkInDatePrompt, setCheckInDatePrompt] = useState(false)
+  const [selectedDateDueDate, setSelectedDateDueDate] = useState(() => toDateInputValue())
   const [taskMotion, setTaskMotion] = useState({})
   const actionLocks = useRef(new Set())
   const createInFlight = useRef(false)
@@ -273,6 +286,11 @@ function App() {
   const openTask = tasks.find((task) => task.id === openTaskId) ?? null
   const activeDateReminderPrompt = dateReminderPrompt ? tasks.find((task) => task.id === dateReminderPrompt.id) ?? null : null
   const activeDateMorningPrompt = dateMorningPrompt ? tasks.find((task) => task.id === dateMorningPrompt.id) ?? null : null
+
+  function updateQuickAddExpanded(nextValue) {
+    setQuickAddExpanded(nextValue)
+    if (!nextValue) setQuickAddDefaults({})
+  }
 
   useEffect(() => {
     if (!startModeTask) return undefined
@@ -446,7 +464,7 @@ function App() {
         setDuplicatePrompt({ mode: 'create', payload, duplicateTask: result.duplicateTask })
         return { blocked: true }
       }
-      setQuickAddExpanded(false)
+      updateQuickAddExpanded(false)
       addToast('Task saved', null)
       return { blocked: false }
     } catch {
@@ -472,6 +490,41 @@ function App() {
 
   function handleSelectDateIdea(idea) {
     setSelectedDateIdea(idea)
+    setSelectedDateDueDate(toDateInputValue())
+  }
+
+  async function handleCheckInComplete() {
+    if (!currentUser) return
+    const now = new Date().toISOString()
+    await actions.updateUserProfile({
+      id: currentUser.id,
+      lastCheckInAt: now,
+    })
+    addToast('Check-in marked complete', null)
+    setCheckInConversationPrompt(true)
+  }
+
+  function maybePromptDateNight() {
+    if (monthlyDateStatus?.status === 'none') {
+      setCheckInDatePrompt(true)
+    }
+  }
+
+  function handleCheckInAddTask() {
+    setCheckInConversationPrompt(false)
+    setQuickAddDefaults({
+      assignedTo: BOTH_ASSIGNEE_ID,
+      category: 'Home',
+      urgency: 'Today',
+      effort: 'Quick',
+    })
+    navigate('/tasks')
+    updateQuickAddExpanded(true)
+  }
+
+  function handleCheckInSkipAdd() {
+    setCheckInConversationPrompt(false)
+    maybePromptDateNight()
   }
 
   async function markDateTaskComplete(task) {
@@ -537,12 +590,12 @@ function App() {
     const topTask = sections?.topTask ?? null
     if (topTask) {
       setOpenTaskId(topTask.id)
-      setQuickAddExpanded(false)
+      updateQuickAddExpanded(false)
       return
     }
 
     setFocusMode(false)
-    setQuickAddExpanded(true)
+      updateQuickAddExpanded(true)
     addToast('Start with a new task', null)
   }
 
@@ -1121,7 +1174,7 @@ function App() {
         })
       })
       addToast('Updated existing task', null)
-      setQuickAddExpanded(false)
+      updateQuickAddExpanded(false)
     }
 
     if (mode === 'edit') {
@@ -1145,7 +1198,7 @@ function App() {
     if (duplicatePrompt.mode === 'create') {
       await actions.createTask(duplicatePrompt.payload)
       addToast('Task saved', null)
-      setQuickAddExpanded(false)
+      updateQuickAddExpanded(false)
     }
 
     if (duplicatePrompt.mode === 'edit') {
@@ -1201,7 +1254,8 @@ function App() {
     lowEnergyMode,
     setLowEnergyMode,
     quickAddExpanded,
-    setQuickAddExpanded,
+    quickAddDefaults,
+    setQuickAddExpanded: updateQuickAddExpanded,
     snoozePreset,
     setSnoozePreset,
     snoozeOptions: SNOOZE_OPTIONS,
@@ -1224,6 +1278,7 @@ function App() {
     onKeepTopThree: handleKeepTopThree,
     onSimplifyList: handleSimplifyList,
     onWeeklyReassign: handleWeeklyReassign,
+    onCheckInComplete: handleCheckInComplete,
     onConvertToRepeat: handleConvertToRepeat,
     onClearToday: handleClearToday,
     onWrapUpTomorrow: handleWrapUpTomorrow,
@@ -1416,14 +1471,61 @@ function App() {
       ) : null}
 
       {selectedDateIdea ? (
+        <section className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm sm:items-center" onClick={() => setSelectedDateIdea(null)}>
+          <div className="w-full max-w-md rounded-[1.75rem] bg-panel p-6 shadow-card" onClick={(event) => event.stopPropagation()}>
+            <h2 className="text-xl font-semibold text-ink">Date night planned</h2>
+            <p className="mt-3 text-base leading-relaxed text-slate-700">{selectedDateIdea.title}</p>
+            <label className="mt-5 block">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Date</span>
+              <input
+                className="w-full rounded-2xl border-sand bg-white px-4 py-3"
+                type="date"
+                value={selectedDateDueDate}
+                onChange={(event) => setSelectedDateDueDate(event.target.value)}
+              />
+            </label>
+            <div className="mt-7 space-y-4">
+              <button className="w-full rounded-3xl bg-white px-4 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.99]" type="button" onClick={() => setSelectedDateIdea(null)}>
+                Close
+              </button>
+              <button
+                className="w-full rounded-3xl bg-accent px-4 py-4 font-medium text-white transition duration-150 active:scale-[0.99]"
+                type="button"
+                onClick={() => handleCreateDateTask(selectedDateIdea, { dueDate: selectedDateDueDate })}
+              >
+                Create task
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {checkInConversationPrompt ? (
         <ConfirmModal
-          title="Date night planned"
-          body={selectedDateIdea.title}
+          title="Anything to add from this conversation?"
           actions={[
-            { label: 'Close', onClick: () => setSelectedDateIdea(null), tone: 'default' },
-            { label: 'Create task', onClick: () => handleCreateDateTask(selectedDateIdea), tone: 'primary' },
+            { label: 'Skip', onClick: handleCheckInSkipAdd, tone: 'default' },
+            { label: 'Add task', onClick: handleCheckInAddTask, tone: 'primary' },
           ]}
-          onCancel={() => setSelectedDateIdea(null)}
+          onCancel={handleCheckInSkipAdd}
+        />
+      ) : null}
+
+      {checkInDatePrompt ? (
+        <ConfirmModal
+          title="Have you planned a date night this month?"
+          actions={[
+            { label: 'Skip', onClick: () => setCheckInDatePrompt(false), tone: 'default' },
+            {
+              label: 'Plan date night',
+              onClick: () => {
+                setCheckInDatePrompt(false)
+                navigate('/dates')
+              },
+              tone: 'primary',
+            },
+          ]}
+          onCancel={() => setCheckInDatePrompt(false)}
         />
       ) : null}
     </>

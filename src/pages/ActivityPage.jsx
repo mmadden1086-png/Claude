@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { SectionCard } from '../components/SectionCard'
 import { StatsCard } from '../components/StatsCard'
 import { TaskCard } from '../components/TaskCard'
-import { formatLastHandled } from '../lib/format'
+import { formatLastHandled, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 
 function ActionRow({ task, subtitle, onOpenTask, actions }) {
@@ -55,6 +55,8 @@ export function ActivityPage({
   const draggingTasks = sections?.draggingTasks ?? []
   const repeatSuggestions = sections?.repeatSuggestions ?? []
   const dateIdeasById = Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea]))
+  const lastCheckInDate = toDate(currentUser.lastCheckInAt)
+  const lastDateNight = dateNightSummary.lastDate
 
   function handleDrilldown(view) {
     if (view?.type === 'open') {
@@ -98,6 +100,27 @@ export function ActivityPage({
       </div>
 
       <StatsCard currentUser={currentUser} partner={partner} stats={stats} goals={goals} goalProgress={goalProgress} onDrilldown={handleDrilldown} />
+
+      <SectionCard title="Relationship" subtitle="What should you do next? Keep the shared rhythm visible.">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-3xl bg-canvas p-4">
+            <p className="text-sm font-semibold text-ink">{lastCheckInDate ? lastCheckInDate.toLocaleDateString() : 'Not yet'}</p>
+            <p className="mt-1 text-xs text-slate-600">Last check-in</p>
+          </div>
+          <div className="rounded-3xl bg-canvas p-4">
+            <p className="text-sm font-semibold text-ink">{lastDateNight ? (dateIdeasById[lastDateNight.ideaId]?.title ?? 'Date night') : 'Not yet'}</p>
+            <p className="mt-1 text-xs text-slate-600">Last date night</p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button className="rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={() => navigate('/tasks')}>
+            Review check-in
+          </button>
+          <button className="rounded-2xl bg-white px-3 py-2 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateNight}>
+            Plan date night
+          </button>
+        </div>
+      </SectionCard>
 
       <SectionCard title="Recently handled" subtitle="What should you do next? Reopen one or repeat what worked.">
         {sections?.recentlyHandled.length ? (

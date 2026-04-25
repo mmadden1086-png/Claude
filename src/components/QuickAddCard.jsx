@@ -54,7 +54,7 @@ function buildInitialState(currentUserId, defaults = {}) {
   }
 }
 
-export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expanded: expandedProp, onExpandedChange }) {
+export function QuickAddCard({ currentUser, users, tasks = [], defaults = {}, onSubmit, expanded: expandedProp, onExpandedChange }) {
   const preferredDefaults = useMemo(() => {
     const recentCreated = tasks
       .filter((task) => task.requestedBy === currentUser.id)
@@ -67,8 +67,9 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
       category: mostCommon(recentCreated.map((task) => task.category), initialState.category),
       repeatType: mostCommon(recentCreated.map((task) => task.repeatType).filter((value) => value && value !== 'none'), initialState.repeatType),
       repeatDays: recentCreated.find((task) => task.repeatType === 'specific-days' && task.repeatDays?.length)?.repeatDays ?? [],
+      ...defaults,
     }
-  }, [currentUser.id, tasks])
+  }, [currentUser.id, defaults, tasks])
   const [form, setForm] = useState(() => buildInitialState(currentUser.id, preferredDefaults))
   const [internalExpanded, setInternalExpanded] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)

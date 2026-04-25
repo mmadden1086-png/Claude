@@ -50,6 +50,27 @@ function isTodayBucketTask(task) {
   return false
 }
 
+function isCompletedWithinDays(task, days) {
+  const completedAt = toDate(task.completedAt)
+  if (!completedAt) return false
+  const diff = differenceInCalendarDays(new Date(), completedAt)
+  return diff >= 0 && diff <= days
+}
+
+function isOverdueByDays(task, days) {
+  const dueDate = toDate(task.dueDate)
+  if (!dueDate) return false
+  return differenceInCalendarDays(new Date(), dueDate) > days
+}
+
+function compactTaskRow(task, onOpenTask) {
+  return (
+    <button key={task.id} className="w-full rounded-2xl bg-canvas px-3 py-2 text-left text-sm text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenTask(task.id)}>
+      {task.title}
+    </button>
+  )
+}
+
 export function TasksPage({
   selection,
   sections,
@@ -61,12 +82,16 @@ export function TasksPage({
   filterId,
   setFilterId,
   quickAddExpanded,
+  quickAddDefaults,
   setQuickAddExpanded,
   onQuickAdd,
   onTaskAction,
   onOpenTask,
   taskMotionState,
   onWeeklyReassign,
+  onCheckInComplete,
+  recentDates,
+  dateIdeas,
 }) {
   const [activeSegment, setActiveSegment] = useState('all')
   const [quickActionMode, setQuickActionMode] = useState('normal')
@@ -115,6 +140,35 @@ export function TasksPage({
     () => (selection?.checkIn ?? selection?.dragging ?? sections?.draggingTasks ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
     [searchQuery, sections?.draggingTasks, selection],
   )
+  const completedLastWeek = useMemo(
+    () => tasks.filter((task) => getTaskStatus(task) === TASK_STATUS.COMPLETED && isCompletedWithinDays(task, 7)).slice(0, 4),
+    [tasks],
+  )
+  const overdueTasks = useMemo(
+    () => allVisibleTasks.filter((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED).slice(0, 4),
+    [allVisibleTasks],
+  )
+  const partnerTasks = useMemo(
+    () => allVisibleTasks.filter((task) => task.requestedBy && task.requestedBy !== currentUser.id && getTaskStatus(task) !== TASK_STATUS.COMPLETED).slice(0, 4),
+    [allVisibleTasks, currentUser.id],
+  )
+  const discussionTasks = useMemo(() => {
+    const seen = new Set()
+    return allVisibleTasks
+      .filter((task) => {
+        const status = getTaskStatus(task)
+        const partnerUntouched = task.requestedBy && task.requestedBy !== currentUser.id && !task.acknowledgedAt && !task.startedAt
+        return status !== TASK_STATUS.COMPLETED && (isOverdueByDays(task, 3) || partnerUntouched)
+      })
+      .filter((task) => {
+        if (seen.has(task.id)) return false
+        seen.add(task.id)
+        return true
+      })
+      .slice(0, 4)
+  }, [allVisibleTasks, currentUser.id])
+  const dateIdeasById = useMemo(() => Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea])), [dateIdeas])
+  const lastDateNight = recentDates?.[0] ?? null
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const totalOpenCount = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const filterLabel = FILTERS.find((filter) => filter.id === filterId)?.label ?? 'current'
@@ -272,11 +326,44 @@ export function TasksPage({
                     <div className="rounded-3xl bg-white p-4">
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-ink">Check-in</p>
-                          <p className="text-xs text-slate-500">Fix the tasks that are dragging.</p>
+                          <p className="text-sm font-semibold text-ink">Check-in prep</p>
+                          <p className="text-xs text-slate-500">Review what moved, what slipped, and what needs discussion.</p>
                         </div>
                         <span className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600">{draggingCount}</span>
                       </div>
+                      <div className="mb-3 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Completed</p>
+                          <div className="mt-2 space-y-2">
+                            {completedLastWeek.length ? completedLastWeek.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">Nothing completed this week yet.</p>}
+                          </div>
+                        </div>
+                        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Overdue</p>
+                          <div className="mt-2 space-y-2">
+                            {overdueTasks.length ? overdueTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">No overdue tasks.</p>}
+                          </div>
+                        </div>
+                        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Partner tasks</p>
+                          <div className="mt-2 space-y-2">
+                            {partnerTasks.length ? partnerTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">No partner asks waiting.</p>}
+                          </div>
+                        </div>
+                        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">What needs discussion</p>
+                          <div className="mt-2 space-y-2">
+                            {discussionTasks.length ? discussionTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">Nothing needs a conversation.</p>}
+                          </div>
+                        </div>
+                      </div>
+                      {lastDateNight ? (
+                        <div className="mb-3 rounded-3xl bg-accentSoft p-3 text-sm text-accent">
+                          <p className="font-semibold">Last date night</p>
+                          <p>{dateIdeasById[lastDateNight.ideaId]?.title ?? lastDateNight.taskTitle ?? 'Date night'}{lastDateNight.rating ? ` - ${lastDateNight.rating}/5` : ''}</p>
+                          {lastDateNight.notes ? <p className="mt-1 text-xs text-accent/80">{lastDateNight.notes}</p> : null}
+                        </div>
+                      ) : null}
                       {visibleDraggingTasks.length ? (
                         <div className="space-y-3">
                           {visibleDraggingTasks.slice(0, 2).map((task) => (
@@ -302,6 +389,13 @@ export function TasksPage({
                       ) : (
                         <div className="rounded-3xl bg-canvas px-4 py-4 text-sm text-slate-500">Nothing is dragging right now.</div>
                       )}
+                      <button
+                        className="mt-3 w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+                        type="button"
+                        onClick={onCheckInComplete}
+                      >
+                        Mark check-in complete
+                      </button>
                     </div>
 
                     <div className="rounded-3xl bg-white p-4">
@@ -417,10 +511,11 @@ export function TasksPage({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3 pt-0">
               <QuickAddCard
-                key={currentUser.id}
+                key={`${currentUser.id}:${JSON.stringify(quickAddDefaults ?? {})}`}
                 currentUser={currentUser}
                 users={users}
                 tasks={tasks}
+                defaults={quickAddDefaults}
                 onSubmit={onQuickAdd}
                 expanded
                 onExpandedChange={setQuickAddExpanded}
