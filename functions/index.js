@@ -1,7 +1,8 @@
 import admin from 'firebase-admin'
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
-import { HttpsError, onCall } from 'firebase-functions/v2/https'
+import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import OpenAI from 'openai'
 
 admin.initializeApp()
 
@@ -17,6 +18,27 @@ const INVALID_TOKEN_ERRORS = new Set([
   'messaging/invalid-registration-token',
   'messaging/registration-token-not-registered',
 ])
+
+function fallbackSuggestion(title = 'Task') {
+  return {
+    doneWhen: `${title} is fully done`,
+    why: "So it's ready when you need it",
+  }
+}
+
+function parseSuggestionContent(content, title) {
+  try {
+    const parsed = JSON.parse(content)
+    const doneWhen = typeof parsed.doneWhen === 'string' ? parsed.doneWhen.trim() : ''
+    const why = typeof parsed.why === 'string' ? parsed.why.trim() : ''
+
+    if (!doneWhen || !why) return fallbackSuggestion(title)
+    return { doneWhen, why }
+  } catch (error) {
+    console.error('Could not parse OpenAI suggestion JSON.', error)
+    return fallbackSuggestion(title)
+  }
+}
 
 async function sendToUser(userId, title, body, data = {}) {
   if (!userId) return
@@ -62,6 +84,81 @@ async function sendToToken(token, title, body, data = {}) {
     data: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, String(value)])),
   })
 }
+
+export const suggestTask = onRequest({ region: 'us-central1', cors: true }, async (request, response) => {
+  if (request.method === 'OPTIONS') {
+    response.status(204).send('')
+    return
+  }
+
+  if (request.method !== 'POST') {
+    response.set('Allow', 'POST')
+    response.status(405).json({ error: 'Method not allowed' })
+    return
+  }
+
+  const title = typeof request.body?.title === 'string' ? request.body.title.trim() : ''
+  const assignedTo = typeof request.body?.assignedTo === 'string' ? request.body.assignedTo.trim() : ''
+  const requestedBy =
+    typeof request.body?.requestedBy === 'string' ? request.body.requestedBy.trim() : request.body?.requestedBy ?? null
+
+  if (!title) {
+    response.status(400).json({ error: 'A task title is required.' })
+    return
+  }
+
+  try {
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY is not configured.')
+    }
+
+    const openai = new OpenAI({ apiKey })
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      max_tokens: 100,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You generate short, real-world task suggestions.
+
+DONE WHEN:
+- describe what it looks like when the task is actually done
+- include the object
+- no words like completed, handled, managed
+
+WHY:
+- explain real-world impact
+- 1 short sentence
+- no productivity or system language
+
+Never use:
+handled, managed, organized, follow-up, completed, efficient
+
+Keep it simple and natural.`,
+        },
+        {
+          role: 'user',
+          content: `Task: ${title}
+Assigned to: ${assignedTo || 'unknown'}
+Requested by: ${requestedBy || 'none'}
+
+Return JSON with:
+doneWhen
+why`,
+        },
+      ],
+    })
+
+    const content = completion.choices[0]?.message?.content ?? ''
+    response.status(200).json(parseSuggestionContent(content, title))
+  } catch (error) {
+    console.error('OpenAI task suggestion failed.', error)
+    response.status(200).json(fallbackSuggestion(title))
+  }
+})
 
 export const onTaskCreated = onDocumentCreated('tasks/{taskId}', async (event) => {
   const task = event.data?.data()
