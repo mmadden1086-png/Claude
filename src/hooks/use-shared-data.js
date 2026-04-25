@@ -12,6 +12,7 @@ import {
   subscribeToDateIdeas,
   subscribeToTasks,
   subscribeToUsers,
+  updateDateIdea as updateDateIdeaDoc,
   updateTask as updateTaskDoc,
   upsertUserProfile,
 } from '../lib/firestore'
@@ -191,6 +192,13 @@ export function useSharedData(currentUser) {
       async createDateIdea(payload) {
         if (canUseFirebase()) {
           await createDateIdea(payload)
+          return
+        }
+        throw new Error('Firebase is not configured yet for date ideas.')
+      },
+      async updateDateIdea(ideaId, updates) {
+        if (canUseFirebase()) {
+          await updateDateIdeaDoc(ideaId, updates)
           return
         }
         throw new Error('Firebase is not configured yet for date ideas.')

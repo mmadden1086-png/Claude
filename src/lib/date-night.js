@@ -40,7 +40,34 @@ export const STARTER_DATE_IDEAS = [
 ]
 
 export function getDateIdeaPool(dateIdeas = []) {
-  return dateIdeas?.length ? dateIdeas : STARTER_DATE_IDEAS
+  const nonArchived = dateIdeas.filter((idea) => (idea.status ?? 'active') !== 'archived')
+  return nonArchived.length ? nonArchived : STARTER_DATE_IDEAS
+}
+
+export function groupDateIdeas(ideas = [], dateHistory = []) {
+  const recentIdeaIds = new Set()
+  const sortedHistory = [...dateHistory].sort(
+    (a, b) => (toDate(b.dateCompleted)?.getTime() ?? 0) - (toDate(a.dateCompleted)?.getTime() ?? 0),
+  )
+  for (const entry of sortedHistory) {
+    if (entry.ideaId && recentIdeaIds.size < 3) recentIdeaIds.add(entry.ideaId)
+  }
+
+  const active = []
+  const recentlyUsed = []
+  const archived = []
+
+  for (const idea of ideas) {
+    if ((idea.status ?? 'active') === 'archived') {
+      archived.push(idea)
+    } else if (recentIdeaIds.has(idea.id)) {
+      recentlyUsed.push(idea)
+    } else {
+      active.push(idea)
+    }
+  }
+
+  return { active, recentlyUsed, archived }
 }
 
 function averageRating(history = []) {
@@ -162,6 +189,24 @@ function enrichIdea(idea, history, filters) {
 }
 
 export function createDateIdeaPayload(form) {
+  return {
+    title: form.title.trim(),
+    description: form.description.trim(),
+    category: form.category || '',
+    budgetLevel: form.budgetLevel || '',
+    duration: form.duration || '',
+    locationType: form.locationType || '',
+    tags: form.tags
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean),
+    status: 'active',
+    usageCount: 0,
+    lastUsedAt: null,
+  }
+}
+
+export function editDateIdeaPayload(form) {
   return {
     title: form.title.trim(),
     description: form.description.trim(),

@@ -18,6 +18,7 @@ import { ACTION_SNOOZE_OPTIONS, BOTH_ASSIGNEE_ID, DEFAULT_USER_GOALS, RESCHEDULE
 import {
   buildDateTask,
   createDateIdeaPayload,
+  editDateIdeaPayload,
   dateNightActivitySummary,
   getDateNightIdeaTitle,
   getDateNightReminderState,
@@ -252,6 +253,7 @@ function App() {
   const [goalEditor, setGoalEditor] = useState(null)
   const [goalSaveBusy, setGoalSaveBusy] = useState(false)
   const [dateIdeaModalOpen, setDateIdeaModalOpen] = useState(false)
+  const [editingDateIdea, setEditingDateIdea] = useState(null)
   const [dateIdeaSaveBusy, setDateIdeaSaveBusy] = useState(false)
   const [dateCompletionTask, setDateCompletionTask] = useState(null)
   const [dateCompletionBusy, setDateCompletionBusy] = useState(false)
@@ -529,13 +531,42 @@ function App() {
   async function handleCreateDateIdea(form) {
     setDateIdeaSaveBusy(true)
     try {
-      await actions.createDateIdea(createDateIdeaPayload(form))
+      if (editingDateIdea) {
+        await actions.updateDateIdea(editingDateIdea.id, editDateIdeaPayload(form))
+        setEditingDateIdea(null)
+        addToast('Idea updated', null)
+      } else {
+        await actions.createDateIdea(createDateIdeaPayload(form))
+        addToast('Date idea saved', null)
+      }
       setDateIdeaModalOpen(false)
-      addToast('Date idea saved', null)
     } catch {
       addToast('Could not save date idea', null)
     } finally {
       setDateIdeaSaveBusy(false)
+    }
+  }
+
+  function handleEditDateIdea(idea) {
+    setEditingDateIdea(idea)
+    setDateIdeaModalOpen(true)
+  }
+
+  async function handleArchiveDateIdea(idea) {
+    try {
+      await actions.updateDateIdea(idea.id, { status: 'archived' })
+      addToast('Idea hidden', null)
+    } catch {
+      addToast('Could not hide idea', null)
+    }
+  }
+
+  async function handleUnarchiveDateIdea(idea) {
+    try {
+      await actions.updateDateIdea(idea.id, { status: 'active' })
+      addToast('Idea restored', null)
+    } catch {
+      addToast('Could not restore idea', null)
     }
   }
 
@@ -1211,6 +1242,13 @@ function App() {
       if (entry.taskId) {
         updateDateReminderEntry(entry.taskId, { reflectionSavedAt: new Date().toISOString() })
       }
+      if (entry.ideaId) {
+        const idea = dateIdeas.find((item) => item.id === entry.ideaId)
+        await actions.updateDateIdea(entry.ideaId, {
+          lastUsedAt: entry.dateCompleted ?? new Date().toISOString(),
+          usageCount: (idea?.usageCount ?? 0) + 1,
+        })
+      }
       setDateCompletionTask(null)
       addToast('Date night tracked', null)
     } finally {
@@ -1352,8 +1390,11 @@ function App() {
     notificationStatus,
     onEnableNotifications: handleEnableNotifications,
     onOpenGoalEditor: (goalKey) => setGoalEditor({ key: goalKey }),
-    onOpenDateIdeaModal: () => setDateIdeaModalOpen(true),
+    onOpenDateIdeaModal: () => { setEditingDateIdea(null); setDateIdeaModalOpen(true) },
     onOpenDateNight: () => navigate('/dates'),
+    onEditDateIdea: handleEditDateIdea,
+    onArchiveDateIdea: handleArchiveDateIdea,
+    onUnarchiveDateIdea: handleUnarchiveDateIdea,
     onCancelPlannedDate: handleCancelDateTask,
     onStartHere: handleStartHere,
     onQuickAdd: handleQuickAdd,
@@ -1557,7 +1598,12 @@ function App() {
       ) : null}
 
       {dateIdeaModalOpen ? (
-        <DateIdeaModal onClose={() => setDateIdeaModalOpen(false)} onSave={handleCreateDateIdea} busy={dateIdeaSaveBusy} />
+        <DateIdeaModal
+          idea={editingDateIdea}
+          onClose={() => { setDateIdeaModalOpen(false); setEditingDateIdea(null) }}
+          onSave={handleCreateDateIdea}
+          busy={dateIdeaSaveBusy}
+        />
       ) : null}
 
       {dateCompletionTask ? (

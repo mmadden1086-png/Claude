@@ -1,18 +1,22 @@
 import { useState } from 'react'
 import { DATE_BUDGET_OPTIONS, DATE_CATEGORY_OPTIONS, DATE_DURATION_OPTIONS, DATE_LOCATION_OPTIONS } from '../lib/date-night'
 
-const initialState = {
-  title: '',
-  description: '',
-  category: '',
-  budgetLevel: '',
-  duration: '',
-  locationType: '',
-  tags: '',
+function ideaToForm(idea) {
+  if (!idea) return { title: '', description: '', category: '', budgetLevel: '', duration: '', locationType: '', tags: '' }
+  return {
+    title: idea.title ?? '',
+    description: idea.description ?? '',
+    category: idea.category ?? '',
+    budgetLevel: idea.budgetLevel ?? '',
+    duration: idea.duration ?? '',
+    locationType: idea.locationType ?? '',
+    tags: (idea.tags ?? []).join(', '),
+  }
 }
 
-export function DateIdeaModal({ onClose, onSave, busy = false }) {
-  const [form, setForm] = useState(initialState)
+export function DateIdeaModal({ idea = null, onClose, onSave, busy = false }) {
+  const [form, setForm] = useState(() => ideaToForm(idea))
+  const isEdit = Boolean(idea)
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -27,8 +31,8 @@ export function DateIdeaModal({ onClose, onSave, busy = false }) {
   return (
     <section className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm sm:items-center" onClick={busy ? undefined : onClose}>
       <form className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-4xl bg-panel p-5 shadow-card" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
-        <h2 className="text-xl font-semibold text-ink">Add date idea</h2>
-        <p className="mt-2 text-sm text-slate-600">Save an idea now so it is easy to pull later.</p>
+        <h2 className="text-xl font-semibold text-ink">{isEdit ? 'Edit idea' : 'Add date idea'}</h2>
+        <p className="mt-2 text-sm text-slate-600">{isEdit ? 'Update the details for this idea.' : 'Save an idea now so it is easy to pull later.'}</p>
 
         <div className="mt-5 space-y-3">
           <input className="w-full rounded-3xl bg-white px-4 py-4" placeholder="Title" value={form.title} onChange={(event) => update('title', event.target.value)} />
@@ -69,7 +73,7 @@ export function DateIdeaModal({ onClose, onSave, busy = false }) {
 
         <div className="mt-5 grid grid-cols-2 gap-2">
           <button className="rounded-3xl bg-white px-4 py-4 font-medium text-slate-700" type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="rounded-3xl bg-accent px-4 py-4 font-semibold text-white disabled:opacity-60" type="submit" disabled={busy}>Save idea</button>
+          <button className="rounded-3xl bg-accent px-4 py-4 font-semibold text-white disabled:opacity-60" type="submit" disabled={busy}>{isEdit ? 'Save changes' : 'Save idea'}</button>
         </div>
       </form>
     </section>

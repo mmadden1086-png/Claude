@@ -187,6 +187,11 @@ export async function createDateIdea(payload) {
   })
 }
 
+export async function updateDateIdea(ideaId, updates) {
+  if (!db) throw new Error('Firestore is not configured yet.')
+  await updateDoc(doc(db, 'dateIdeas', ideaId), updates)
+}
+
 export async function createDateHistory(payload) {
   if (!dateHistoryCollection) throw new Error('Firestore is not configured yet.')
   await addDoc(dateHistoryCollection, {
