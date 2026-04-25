@@ -17,6 +17,9 @@ const OBJECT_STOP_WORDS = new Set([
   'schedule',
   'call',
   'buy',
+  'build',
+  'launch',
+  'complete',
   'review',
   'finish',
   'help',
@@ -71,6 +74,20 @@ function extractTaskObject(title = '') {
 function shortObject(title = '') {
   const object = extractTaskObject(title)
   return object.split(/\s+/).slice(0, 4).join(' ')
+}
+
+export function getTaskType(title = '') {
+  const t = title.toLowerCase()
+
+  if (t.includes('finish') || t.includes('build') || t.includes('launch') || t.includes('complete')) {
+    return 'project'
+  }
+
+  if (t.startsWith('help')) {
+    return 'support'
+  }
+
+  return 'action'
 }
 
 function noteObject(notes = '') {
@@ -217,9 +234,23 @@ function getLearnedSuggestion(taskTitle) {
 }
 
 function buildFallback(task) {
-  const object = shortObject(task.title)
-  if (!object) return ''
-  return `${object} is prepared and ready to use`
+  const title = task.title.trim()
+  if (!title) return ''
+  return `${title} is fully done`
+}
+
+function buildProjectDone(task) {
+  const object = shortObject(task.title) || sentenceCase(task.title)
+  if (!object) return buildFallback(task)
+  return `${object} is complete and ready to use`
+}
+
+function buildSupportDone(task) {
+  const personName = getPersonName(task)
+  if (personName === 'Martin') return 'Martin has what he needs and is ready'
+  if (personName === 'Megan') return 'Megan has what she needs and is ready'
+  if (personName === 'Matt') return 'Matt has what he needs and is ready'
+  return 'They have what they need and are ready'
 }
 
 function buildDoneResult(task) {
@@ -227,15 +258,10 @@ function buildDoneResult(task) {
   const category = task.category || ''
   const objectFromNote = noteObject(task.notes)
   const title = task.title.trim()
-  const titleLower = title.toLowerCase()
+  const taskType = getTaskType(title)
 
-  if (titleLower.startsWith('help ')) {
-    const personName = getPersonName(task)
-    if (personName === 'Martin') return 'Martin has what he needs and is ready'
-    if (personName === 'Megan') return 'Megan has what she needs and is ready'
-    if (personName === 'Matt') return 'Matt has what he needs and is ready'
-    return 'They have what they need and are ready'
-  }
+  if (taskType === 'project') return buildProjectDone(task)
+  if (taskType === 'support') return buildSupportDone(task)
 
   if (context.includes('get ready')) {
     const object = shortObject(task.title.replace(/get ready/gi, ''))

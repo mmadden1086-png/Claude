@@ -129,11 +129,15 @@ DONE WHEN:
 - describe what it looks like when the task is actually done
 - include the object
 - no words like completed, handled, managed
+- if the task is a project like finish, build, launch, or complete, say the object is complete and ready to use
+- if the task starts with help, say the person has what they need and is ready
 
 WHY:
 - explain real-world impact
 - 1 short sentence
 - no productivity or system language
+- for project tasks, say: So it's actually finished and not left in progress
+- for help tasks, say: So they're not stuck without it
 
 Never use:
 handled, managed, organized, follow-up, completed, efficient

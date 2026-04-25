@@ -1,4 +1,4 @@
-import { hasEnoughContent, isGeneric } from './suggestionEngine'
+import { getTaskType, hasEnoughContent, isGeneric } from './suggestionEngine'
 
 const WHY_STORAGE_KEY = 'follow-through-why-patterns'
 const STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'in', 'on', 'with', 'my'])
@@ -234,6 +234,16 @@ function buildUseCaseWhy(task) {
 }
 
 function buildWhy(task, context) {
+  const taskType = getTaskType(task.title)
+
+  if (taskType === 'project') {
+    return "So it's actually finished and not left in progress"
+  }
+
+  if (taskType === 'support') {
+    return "So they're not stuck without it"
+  }
+
   const personResult = personWhy(task, context)
   if (personResult) return personResult
 
@@ -253,7 +263,7 @@ function finalWhy(result) {
 
 function fallbackWhy(task) {
   void task
-  return "So it's ready when you need it"
+  return "So it's taken care of"
 }
 
 export function isUnsafeWhyText(text = '') {
