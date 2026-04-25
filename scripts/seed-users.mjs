@@ -69,6 +69,17 @@ const users = [
   },
 ]
 
+if (env.FIREBASE_UX_TEST_UID && env.FIREBASE_UX_TEST_EMAIL) {
+  users.push({
+    id: env.FIREBASE_UX_TEST_UID,
+    name: env.FIREBASE_UX_TEST_NAME || 'UX Test User',
+    email: env.FIREBASE_UX_TEST_EMAIL,
+    pushToken: '',
+    totalPoints: 0,
+    weeklyPoints: 0,
+  })
+}
+
 for (const user of users) {
   await db.collection('users').doc(user.id).set(user, { merge: true })
   console.log(`Seeded users/${user.id}`)
