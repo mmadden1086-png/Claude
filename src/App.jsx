@@ -37,6 +37,7 @@ import { useSharedData } from './hooks/use-shared-data'
 import { appendHistory, computeStats, createTaskPayload, deriveSections, getBannerMessage, getPointsForTask, sortTasks } from './lib/task-utils'
 import { getAccountabilitySignals, getDailyAccountabilityMessage } from './lib/accountability'
 import { dismissCheckInForToday, getCheckInState, isCheckInDismissedForToday } from './lib/check-in'
+import { buildWeeklyCheckInReview } from './lib/check-in-review'
 import { detectDuplicateTask, getSmartRetryDate } from './lib/task-decision'
 import { selectTaskViews } from './lib/selection'
 import { advanceRepeatingTask, shouldAdvanceRepeat } from './lib/task-state'
@@ -302,6 +303,10 @@ function App() {
   const monthlyDateStatus = useMemo(() => getMonthlyDateStatus(tasks, dateHistory), [dateHistory, tasks])
   const dateNightSummary = useMemo(() => dateNightActivitySummary(dateHistory), [dateHistory])
   const topDateIdeas = useMemo(() => topRatedDateIdeas(dateIdeas, dateHistory), [dateHistory, dateIdeas])
+  const checkInReview = useMemo(
+    () => currentUser ? buildWeeklyCheckInReview({ tasks: tasks ?? [], currentUserId: currentUser.id, partnerId: partner?.id }) : null,
+    [tasks, currentUser, partner],
+  )
   const checkInState = useMemo(
     () => getCheckInState(currentUser?.checkIn ?? { lastCompletedAt: currentUser?.lastCheckInAt ?? null }),
     [currentUser],
@@ -1413,6 +1418,7 @@ function App() {
     onPlanCheckIn: handlePlanCheckIn,
     onViewCheckInDetails: handleViewCheckInDetails,
     onDismissCheckInBanner: handleDismissCheckInBanner,
+    checkInReview,
     checkInPrepOpenToken,
     onConvertToRepeat: handleConvertToRepeat,
     onClearToday: handleClearToday,

@@ -404,7 +404,7 @@ export const suggestCheckInTasks = onRequest({ region: 'us-central1', cors: true
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.25,
-      max_tokens: 260,
+      max_tokens: 400,
       response_format: { type: 'json_object' },
       messages: [
         {

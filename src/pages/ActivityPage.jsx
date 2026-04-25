@@ -6,6 +6,7 @@ import { StatsCard } from '../components/StatsCard'
 import { TaskCard } from '../components/TaskCard'
 import { BOTH_ASSIGNEE_ID, TASK_STATUS } from '../lib/constants'
 import { fetchCheckInTaskSuggestions } from '../lib/check-in-ai'
+import { buildWeeklyCheckInReview, getWeeklyCheckInOpening } from '../lib/check-in-review'
 import { formatLastHandled, getTaskStatus, isOverdue, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 
@@ -88,6 +89,7 @@ export function ActivityPage({
   const [checkInSuggestions, setCheckInSuggestions] = useState([])
   const [checkInSuggestionsBusy, setCheckInSuggestionsBusy] = useState(false)
   const [addedSuggestionTitles, setAddedSuggestionTitles] = useState([])
+  const [dismissedSuggestions, setDismissedSuggestions] = useState(new Set())
 
   const checkInActive = activeTab === 'checkin'
 
@@ -125,6 +127,12 @@ export function ActivityPage({
       })
       .slice(0, 4)
   }, [filteredTasks, currentUser.id])
+
+  const checkInReview = useMemo(
+    () => buildWeeklyCheckInReview({ tasks: tasks ?? [], currentUserId: currentUser.id, partnerId: partner?.id }),
+    [tasks, currentUser.id, partner?.id],
+  )
+  const checkInOpening = getWeeklyCheckInOpening(checkInReview)
 
   useEffect(() => {
     if (!checkInActive) return undefined
@@ -208,35 +216,42 @@ export function ActivityPage({
     taskMotionState,
   }
 
-  // ── Check-in prep content (shared between Overview toggle and Check-in tab) ──
+  // ── Check-in prep content (Check-in tab) ──
   const checkInPrepContent = (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      {checkInOpening ? (
+        <p className="px-1 text-sm font-medium text-slate-700">{checkInOpening}</p>
+      ) : null}
+
+      {checkInReview.agenda.length ? (
+        <div className="space-y-2">
+          {checkInReview.agenda.map((item) => (
+            <div key={item.id} className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+              <p className="text-sm font-semibold text-ink">{item.title}</p>
+              {item.reason ? <p className="mt-1 text-xs text-slate-500">{item.reason}</p> : null}
+              {item.suggestedQuestion ? <p className="mt-2 text-xs font-medium text-accent">{item.suggestedQuestion}</p> : null}
+              <button
+                className="mt-2 rounded-2xl bg-canvas px-3 py-2 text-xs font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
+                type="button"
+                onClick={() => onOpenTask(item.id)}
+              >
+                Open
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-3xl bg-canvas px-4 py-4 text-sm text-slate-500">No agenda items right now.</div>
+      )}
+
+      {checkInReview.completed.length ? (
         <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Completed</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Completed this week</p>
           <div className="mt-2 space-y-2">
-            {completedLastWeek.length ? completedLastWeek.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">Nothing completed this week yet.</p>}
+            {checkInReview.completed.map((task) => compactTaskRow(task, onOpenTask))}
           </div>
         </div>
-        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Overdue</p>
-          <div className="mt-2 space-y-2">
-            {overdueTasks.length ? overdueTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">No overdue tasks.</p>}
-          </div>
-        </div>
-        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Partner tasks</p>
-          <div className="mt-2 space-y-2">
-            {partnerTasks.length ? partnerTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">No partner asks waiting.</p>}
-          </div>
-        </div>
-        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Needs discussion</p>
-          <div className="mt-2 space-y-2">
-            {discussionTasks.length ? discussionTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">Nothing needs a conversation.</p>}
-          </div>
-        </div>
-      </div>
+      ) : null}
 
       {lastDateNight ? (
         <div className="rounded-3xl bg-accentSoft p-3 text-sm text-accent">
@@ -252,24 +267,36 @@ export function ActivityPage({
           {checkInSuggestionsBusy ? <span className="text-xs text-slate-500">Loading suggestions…</span> : null}
         </div>
         <div className="mt-2 space-y-2">
-          {checkInSuggestions.length ? (
-            checkInSuggestions.map((suggestion) => {
-              const added = addedSuggestionTitles.includes(suggestion.title)
-              return (
-                <div key={suggestion.title} className="rounded-2xl bg-canvas p-3">
-                  <p className="text-sm font-medium text-ink">{suggestion.title}</p>
-                  {suggestion.reason ? <p className="mt-1 text-xs text-slate-500">{suggestion.reason}</p> : null}
-                  <button
-                    className={`mt-3 rounded-2xl px-3 py-2 text-xs font-semibold transition duration-150 active:scale-[0.98] ${added ? 'bg-white text-slate-400' : 'bg-accent text-white'}`}
-                    type="button"
-                    disabled={added}
-                    onClick={() => handleAddCheckInSuggestion(suggestion)}
-                  >
-                    {added ? 'Added' : 'Add task'}
-                  </button>
-                </div>
-              )
-            })
+          {checkInSuggestions.filter((s) => !dismissedSuggestions.has(s.title)).length ? (
+            checkInSuggestions
+              .filter((s) => !dismissedSuggestions.has(s.title))
+              .map((suggestion) => {
+                const added = addedSuggestionTitles.includes(suggestion.title)
+                return (
+                  <div key={suggestion.title} className="rounded-2xl bg-canvas p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-ink">{suggestion.title}</p>
+                      <button
+                        className="shrink-0 text-slate-400 transition hover:text-slate-600 active:scale-[0.98]"
+                        type="button"
+                        aria-label="Dismiss suggestion"
+                        onClick={() => setDismissedSuggestions((current) => new Set([...current, suggestion.title]))}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {suggestion.reason ? <p className="mt-1 text-xs text-slate-500">{suggestion.reason}</p> : null}
+                    <button
+                      className={`mt-3 rounded-2xl px-3 py-2 text-xs font-semibold transition duration-150 active:scale-[0.98] ${added ? 'bg-white text-slate-400' : 'bg-accent text-white'}`}
+                      type="button"
+                      disabled={added}
+                      onClick={() => handleAddCheckInSuggestion(suggestion)}
+                    >
+                      {added ? 'Added' : 'Add task'}
+                    </button>
+                  </div>
+                )
+              })
           ) : (
             <p className="text-sm text-slate-500">
               {checkInSuggestionsBusy ? 'Looking for useful next steps.' : 'No AI suggestions needed right now.'}

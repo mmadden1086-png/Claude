@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { TASK_STATUS } from '../lib/constants'
 import { getTaskStatus } from '../lib/format'
 import { TaskCard } from '../components/TaskCard'
+import { FocusInsightBanner } from '../components/FocusInsightBanner'
+import { getWeeklyCheckInOpening } from '../lib/check-in-review'
 
 export function FocusPage({
   sections,
@@ -11,6 +13,7 @@ export function FocusPage({
   monthlyDateStatus,
   accountabilityBanner,
   checkInBanner,
+  checkInReview,
   onOpenDateNight,
   onPlanCheckIn,
   onViewCheckInDetails,
@@ -130,6 +133,7 @@ export function FocusPage({
               {accountabilityBanner}
             </div>
           ) : null}
+          <FocusInsightBanner insight={checkInReview ? { body: getWeeklyCheckInOpening(checkInReview) } : null} />
           {guidance ? (
             guidance.onClick ? (
               <button className="inline-flex px-1 text-sm font-medium text-slate-500 underline-offset-4 transition hover:text-accent hover:underline" type="button" onClick={guidance.onClick}>
