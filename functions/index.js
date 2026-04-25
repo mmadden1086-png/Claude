@@ -784,7 +784,7 @@ function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, las
 // Picks the highest-severity issue per user, selects a random non-repeat message
 // from that tier's pool, and enforces a 24h global cooldown + dedupe.
 export const smartDailyCheck = onSchedule(
-  { schedule: '0 9 * * *', timeZone: 'America/Los_Angeles' },
+  { schedule: '0 7 * * *', timeZone: 'America/Los_Angeles' },
   async () => {
     const now = new Date()
     if (!isWithinSendWindow(now)) return
