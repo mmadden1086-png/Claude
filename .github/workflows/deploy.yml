@@ -25,23 +25,23 @@ jobs:
       - name: Generate service worker
         run: node scripts/generate-firebase-sw.mjs
         env:
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_API_KEY: AIzaSyAhgGIhmiJYS5ZxA4N0HETLBa9W3EcWErI
+          VITE_FIREBASE_AUTH_DOMAIN: follow-through-87d50.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: follow-through-87d50
+          VITE_FIREBASE_STORAGE_BUCKET: follow-through-87d50.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID: "153740630717"
+          VITE_FIREBASE_APP_ID: 1:153740630717:web:46e7580b3c75564c74b5d4
           VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
 
       - name: Build
         run: npm run build
         env:
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_API_KEY: AIzaSyAhgGIhmiJYS5ZxA4N0HETLBa9W3EcWErI
+          VITE_FIREBASE_AUTH_DOMAIN: follow-through-87d50.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: follow-through-87d50
+          VITE_FIREBASE_STORAGE_BUCKET: follow-through-87d50.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID: "153740630717"
+          VITE_FIREBASE_APP_ID: 1:153740630717:web:46e7580b3c75564c74b5d4
           VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
 
       - name: Deploy to Firebase
