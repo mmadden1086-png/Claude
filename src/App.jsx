@@ -1474,6 +1474,9 @@ function App() {
         <ActionSheetModal
           title={actionSheet.type === 'snooze' ? 'Snooze task' : 'Reschedule task'}
           options={actionSheet.type === 'snooze' ? ACTION_SNOOZE_OPTIONS : RESCHEDULE_OPTIONS}
+          nudge={actionSheet.type === 'snooze' && (actionSheet.task?.snoozeCount ?? 0) >= 2
+            ? `You've pushed this ${actionSheet.task.snoozeCount} time${actionSheet.task.snoozeCount === 1 ? '' : 's'}. Is it still real?`
+            : null}
           customDate={customDate}
           customLabel={actionSheet.type === 'snooze' ? 'Custom snooze date' : 'Custom due date'}
           onCustomDateChange={setCustomDate}

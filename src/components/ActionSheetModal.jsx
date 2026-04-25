@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 
-export function ActionSheetModal({ title, options, customDate, customLabel, onCustomDateChange, onClose, onSelect }) {
+export function ActionSheetModal({ title, options, customDate, customLabel, onCustomDateChange, onClose, onSelect, nudge }) {
   const showCustomDate = options.some((option) => option.id === 'custom')
 
   return (
@@ -12,6 +12,12 @@ export function ActionSheetModal({ title, options, customDate, customLabel, onCu
             <X size={18} />
           </button>
         </div>
+
+        {nudge ? (
+          <div className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {nudge}
+          </div>
+        ) : null}
 
         <div className="mt-4 space-y-3">
           {options.map((option) => (
