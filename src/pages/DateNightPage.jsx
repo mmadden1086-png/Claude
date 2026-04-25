@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
-import { DATE_BUDGET_OPTIONS, DATE_CATEGORY_OPTIONS, DATE_DURATION_OPTIONS, generateDateSuggestions, getDateIdeaPool, groupDateIdeas, pickDateForUs } from '../lib/date-night'
+import { ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { differenceInCalendarDays } from 'date-fns'
+import { DATE_BUDGET_OPTIONS, DATE_CATEGORY_OPTIONS, DATE_DURATION_OPTIONS, generateDateSuggestions, getDateIdeaPool, getDateNightDueAt, groupDateIdeas, pickDateForUs } from '../lib/date-night'
 import { toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -114,23 +115,78 @@ export function DateNightPage({
 }) {
   const [dateFilters, setDateFilters] = useState({ budget: 'Any', duration: 'Any', category: 'Any' })
   const [searchQuery, setSearchQuery] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [showAllActive, setShowAllActive] = useState(false)
   const [recentOpen, setRecentOpen] = useState(false)
   const [archivedOpen, setArchivedOpen] = useState(false)
+  const [previewPick, setPreviewPick] = useState(null)
 
+  const dateIdeasById = useMemo(
+    () => Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea])),
+    [dateIdeas],
+  )
+  const recentCompletedDates = useMemo(
+    () => [...(dateHistory ?? [])]
+      .sort((a, b) => (toDate(b.dateCompleted)?.getTime() ?? 0) - (toDate(a.dateCompleted)?.getTime() ?? 0))
+      .slice(0, 3)
+      .map((entry) => ({ ...entry, idea: dateIdeasById[entry.ideaId] ?? null })),
+    [dateHistory, dateIdeasById],
+  )
+  const daysSinceLastDate = useMemo(() => {
+    const last = recentCompletedDates[0]
+    if (!last) return null
+    const date = toDate(last.dateCompleted)
+    if (!date) return null
+    return differenceInCalendarDays(new Date(), date)
+  }, [recentCompletedDates])
+  const plannedDateDisplay = useMemo(() => {
+    const task = monthlyDateStatus.plannedTask
+    if (!task) return null
+    const dueAt = getDateNightDueAt(task)
+    if (!dueAt) return toDate(task.dueDate)?.toLocaleDateString() ?? 'This month'
+    return dueAt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  }, [monthlyDateStatus.plannedTask])
   const ideaPool = useMemo(() => getDateIdeaPool(dateIdeas ?? []), [dateIdeas])
-  const searchedIdeaPool = useMemo(() => ideaPool.filter((idea) => matchesIdeaSearch(idea, searchQuery)), [ideaPool, searchQuery])
-  const dateSuggestions = useMemo(() => generateDateSuggestions(searchedIdeaPool, dateHistory ?? [], dateFilters), [dateFilters, dateHistory, searchedIdeaPool])
-  const pickedForUs = useMemo(() => pickDateForUs(searchedIdeaPool, dateHistory ?? [], dateFilters), [dateFilters, dateHistory, searchedIdeaPool])
+  const searchedIdeaPool = useMemo(
+    () => ideaPool.filter((idea) => matchesIdeaSearch(idea, searchQuery)),
+    [ideaPool, searchQuery],
+  )
+  const dateSuggestions = useMemo(
+    () => generateDateSuggestions(searchedIdeaPool, dateHistory ?? [], dateFilters),
+    [dateFilters, dateHistory, searchedIdeaPool],
+  )
+  const pickedForUs = useMemo(
+    () => pickDateForUs(searchedIdeaPool, dateHistory ?? [], dateFilters),
+    [dateFilters, dateHistory, searchedIdeaPool],
+  )
   const fallbackPick = useMemo(
-    () => pickDateForUs(searchedIdeaPool.length ? searchedIdeaPool : ideaPool, dateHistory ?? [], { budget: 'Any', duration: 'Any', category: 'Any' }),
+    () => pickDateForUs(
+      searchedIdeaPool.length ? searchedIdeaPool : ideaPool,
+      dateHistory ?? [],
+      { budget: 'Any', duration: 'Any', category: 'Any' },
+    ),
     [dateHistory, ideaPool, searchedIdeaPool],
   )
   const { active, recentlyUsed, archived } = useMemo(
     () => groupDateIdeas(dateIdeas ?? [], dateHistory ?? []),
     [dateIdeas, dateHistory],
   )
+  const filtersActive = dateFilters.budget !== 'Any' || dateFilters.duration !== 'Any' || dateFilters.category !== 'Any'
   const activeToShow = showAllActive ? active : active.slice(0, ACTIVE_PREVIEW_LIMIT)
+
+  function handlePickForUs() {
+    const pick = pickedForUs ?? fallbackPick
+    if (pick?.idea) { setPreviewPick(pick); return }
+    onOpenDateIdeaModal()
+  }
+
+  function handleTryAnother() {
+    const currentId = previewPick?.idea?.id
+    const filteredPool = currentId ? searchedIdeaPool.filter((i) => i.id !== currentId) : searchedIdeaPool
+    const pool = filteredPool.length ? filteredPool : (ideaPool.length ? ideaPool : searchedIdeaPool)
+    const next = pickDateForUs(pool, dateHistory ?? [], dateFilters)
+    setPreviewPick(next ?? fallbackPick ?? null)
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -141,26 +197,68 @@ export function DateNightPage({
             body="Store ideas, get a few strong options fast, and track what you want to repeat."
           />
 
+          {recentCompletedDates.length > 0 ? (
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {recentCompletedDates.map((entry) => (
+                <div key={entry.id} className="min-w-[8rem] shrink-0 rounded-3xl bg-white p-3">
+                  <p className="line-clamp-1 text-sm font-medium text-ink">{entry.idea?.title ?? entry.taskTitle ?? 'Date night'}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {entry.rating ? `${entry.rating}/5` : 'No rating'}
+                    {entry.dateCompleted ? ` · ${toDate(entry.dateCompleted)?.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) ?? ''}` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           <SectionCard title="This month">
             <div className="rounded-3xl bg-white p-4">
+              {recentCompletedDates[0] ? (
+                <p className="mb-2 text-sm text-slate-600">
+                  {'Last: '}
+                  <span className="font-medium text-ink">{recentCompletedDates[0].idea?.title ?? 'Date night'}</span>
+                  {daysSinceLastDate !== null ? (
+                    <span className="ml-1.5 text-slate-400">{daysSinceLastDate === 0 ? '· today' : `· ${daysSinceLastDate}d ago`}</span>
+                  ) : null}
+                </p>
+              ) : null}
               <p className="text-sm font-medium text-ink">
                 {monthlyDateStatus.status === 'completed'
                   ? 'Completed this month'
                   : monthlyDateStatus.status === 'planned'
-                    ? `Date planned: ${toDate(monthlyDateStatus.plannedTask?.dueDate)?.toLocaleDateString() ?? 'This month'}`
-                    : 'No date planned this month'}
+                    ? `Planned: ${plannedDateDisplay ?? 'This month'}`
+                    : 'No date planned yet'}
               </p>
-              <button
-                className="mt-3 w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
-                type="button"
-                onClick={() => {
-                  if (pickedForUs?.idea) { onSelectDateIdea(pickedForUs.idea); return }
-                  if (fallbackPick?.idea) { onSelectDateIdea(fallbackPick.idea); return }
-                  onOpenDateIdeaModal()
-                }}
-              >
-                Pick for us
-              </button>
+              {previewPick ? (
+                <div className="mt-3 rounded-2xl bg-accentSoft p-3">
+                  <p className="font-medium text-ink">{previewPick.idea.title}</p>
+                  {previewPick.whyFits ? <p className="mt-1 text-sm text-accent/80">{previewPick.whyFits}</p> : null}
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      className="flex-1 rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+                      type="button"
+                      onClick={() => { onSelectDateIdea(previewPick.idea); setPreviewPick(null) }}
+                    >
+                      Choose this
+                    </button>
+                    <button
+                      className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
+                      type="button"
+                      onClick={handleTryAnother}
+                    >
+                      Try another
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="mt-3 w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+                  type="button"
+                  onClick={handlePickForUs}
+                >
+                  Pick for us
+                </button>
+              )}
               {monthlyDateStatus.status === 'planned' && monthlyDateStatus.plannedTask ? (
                 <button
                   className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
@@ -174,10 +272,14 @@ export function DateNightPage({
           </SectionCard>
 
           <SectionCard
-            title="Generate a date"
-            subtitle="Get up to three solid options fast."
+            title="Date ideas"
+            subtitle="Get suggestions or browse your full list."
             action={(
-              <button className="rounded-full bg-white px-3 py-2 text-sm text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateIdeaModal}>
+              <button
+                className="rounded-full bg-white px-3 py-2 text-sm text-slate-600 transition duration-150 active:scale-[0.98]"
+                type="button"
+                onClick={onOpenDateIdeaModal}
+              >
                 Add idea
               </button>
             )}
@@ -195,17 +297,29 @@ export function DateNightPage({
               ) : null}
             </label>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <select className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-700" value={dateFilters.budget} onChange={(event) => setDateFilters((current) => ({ ...current, budget: event.target.value }))}>
-                {DATE_BUDGET_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-              <select className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-700" value={dateFilters.duration} onChange={(event) => setDateFilters((current) => ({ ...current, duration: event.target.value }))}>
-                {DATE_DURATION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-              <select className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-700" value={dateFilters.category} onChange={(event) => setDateFilters((current) => ({ ...current, category: event.target.value }))}>
-                {['Any', ...DATE_CATEGORY_OPTIONS].map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            </div>
+            <button
+              className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-sm transition duration-150 active:scale-[0.98] ${filtersActive ? 'bg-accentSoft text-accent' : 'bg-white text-slate-600'}`}
+              type="button"
+              onClick={() => setFiltersOpen((current) => !current)}
+            >
+              <SlidersHorizontal size={14} />
+              <span>Filter{filtersActive ? ' (active)' : ''}</span>
+              {filtersOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+
+            {filtersOpen ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <select className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-700" value={dateFilters.budget} onChange={(event) => setDateFilters((current) => ({ ...current, budget: event.target.value }))}>
+                  {DATE_BUDGET_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                <select className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-700" value={dateFilters.duration} onChange={(event) => setDateFilters((current) => ({ ...current, duration: event.target.value }))}>
+                  {DATE_DURATION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                <select className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-700" value={dateFilters.category} onChange={(event) => setDateFilters((current) => ({ ...current, category: event.target.value }))}>
+                  {['Any', ...DATE_CATEGORY_OPTIONS].map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+            ) : null}
 
             <div className="space-y-3">
               {dateSuggestions.length ? (
@@ -219,7 +333,11 @@ export function DateNightPage({
                       {index === 0 ? <p className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">Best choice</p> : null}
                       {entry.label ? <p className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent">{entry.label}</p> : null}
                     </div>
-                    <button className="mt-3 w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={() => onSelectDateIdea(entry.idea)}>
+                    <button
+                      className="mt-3 w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+                      type="button"
+                      onClick={() => onSelectDateIdea(entry.idea)}
+                    >
                       Choose this
                     </button>
                   </div>
@@ -227,7 +345,7 @@ export function DateNightPage({
               ) : (
                 <div className="rounded-3xl bg-white p-4">
                   <p className="text-sm text-slate-500">No matches yet</p>
-                  <div className="mt-3 flex gap-2 flex-wrap">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       className="w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98] sm:flex-1"
                       type="button"
@@ -249,94 +367,91 @@ export function DateNightPage({
                 </div>
               )}
             </div>
-          </SectionCard>
 
-          <SectionCard
-            title="Your ideas"
-            subtitle="Tap Edit to update, Hide to archive."
-            action={(
-              <button className="rounded-full bg-white px-3 py-2 text-sm text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateIdeaModal}>
-                Add idea
-              </button>
-            )}
-          >
-            {!(dateIdeas?.length) ? (
-              <div className="rounded-3xl bg-white p-4">
-                <p className="text-sm text-slate-500">No ideas saved yet.</p>
-                <button className="mt-3 w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateIdeaModal}>
-                  Add your first idea
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {active.length > 0 ? (
-                  <div className="space-y-3">
-                    {activeToShow.map((idea) => (
-                      <IdeaCard
-                        key={idea.id}
-                        idea={idea}
-                        onSelect={onSelectDateIdea}
-                        onEdit={onEditDateIdea}
-                        onArchive={onArchiveDateIdea}
-                        onUnarchive={onUnarchiveDateIdea}
-                      />
-                    ))}
-                    {active.length > ACTIVE_PREVIEW_LIMIT && !showAllActive ? (
-                      <button
-                        className="w-full rounded-3xl bg-white px-4 py-3 text-sm font-medium text-slate-600 transition duration-150 active:scale-[0.98]"
-                        type="button"
-                        onClick={() => setShowAllActive(true)}
-                      >
-                        View all {active.length} ideas
-                      </button>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="rounded-3xl bg-white px-4 py-4 text-sm text-slate-500">All ideas are archived or recently used.</div>
-                )}
-
-                {recentlyUsed.length > 0 ? (
-                  <CollapsibleGroup
-                    title="Recently used"
-                    count={recentlyUsed.length}
-                    open={recentOpen}
-                    onToggle={() => setRecentOpen((current) => !current)}
+            <div className="mt-1 border-t border-slate-100 pt-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Your ideas</p>
+              {!(dateIdeas?.length) ? (
+                <div className="rounded-3xl bg-white p-4">
+                  <p className="text-sm text-slate-500">No ideas saved yet.</p>
+                  <button
+                    className="mt-3 w-full rounded-2xl bg-accent px-3 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+                    type="button"
+                    onClick={onOpenDateIdeaModal}
                   >
-                    {recentlyUsed.map((idea) => (
-                      <IdeaCard
-                        key={idea.id}
-                        idea={idea}
-                        onSelect={onSelectDateIdea}
-                        onEdit={onEditDateIdea}
-                        onArchive={onArchiveDateIdea}
-                        onUnarchive={onUnarchiveDateIdea}
-                      />
-                    ))}
-                  </CollapsibleGroup>
-                ) : null}
+                    Add your first idea
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {active.length > 0 ? (
+                    <div className="space-y-3">
+                      {activeToShow.map((idea) => (
+                        <IdeaCard
+                          key={idea.id}
+                          idea={idea}
+                          onSelect={onSelectDateIdea}
+                          onEdit={onEditDateIdea}
+                          onArchive={onArchiveDateIdea}
+                          onUnarchive={onUnarchiveDateIdea}
+                        />
+                      ))}
+                      {active.length > ACTIVE_PREVIEW_LIMIT && !showAllActive ? (
+                        <button
+                          className="w-full rounded-3xl bg-white px-4 py-3 text-sm font-medium text-slate-600 transition duration-150 active:scale-[0.98]"
+                          type="button"
+                          onClick={() => setShowAllActive(true)}
+                        >
+                          View all {active.length} ideas
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="rounded-3xl bg-white px-4 py-4 text-sm text-slate-500">All ideas are archived or recently used.</div>
+                  )}
 
-                {archived.length > 0 ? (
-                  <CollapsibleGroup
-                    title="Archived"
-                    count={archived.length}
-                    open={archivedOpen}
-                    onToggle={() => setArchivedOpen((current) => !current)}
-                  >
-                    {archived.map((idea) => (
-                      <IdeaCard
-                        key={idea.id}
-                        idea={idea}
-                        onSelect={onSelectDateIdea}
-                        onEdit={onEditDateIdea}
-                        onArchive={onArchiveDateIdea}
-                        onUnarchive={onUnarchiveDateIdea}
-                        isArchived
-                      />
-                    ))}
-                  </CollapsibleGroup>
-                ) : null}
-              </div>
-            )}
+                  {recentlyUsed.length > 0 ? (
+                    <CollapsibleGroup
+                      title="Recently used"
+                      count={recentlyUsed.length}
+                      open={recentOpen}
+                      onToggle={() => setRecentOpen((current) => !current)}
+                    >
+                      {recentlyUsed.map((idea) => (
+                        <IdeaCard
+                          key={idea.id}
+                          idea={idea}
+                          onSelect={onSelectDateIdea}
+                          onEdit={onEditDateIdea}
+                          onArchive={onArchiveDateIdea}
+                          onUnarchive={onUnarchiveDateIdea}
+                        />
+                      ))}
+                    </CollapsibleGroup>
+                  ) : null}
+
+                  {archived.length > 0 ? (
+                    <CollapsibleGroup
+                      title="Archived"
+                      count={archived.length}
+                      open={archivedOpen}
+                      onToggle={() => setArchivedOpen((current) => !current)}
+                    >
+                      {archived.map((idea) => (
+                        <IdeaCard
+                          key={idea.id}
+                          idea={idea}
+                          onSelect={onSelectDateIdea}
+                          onEdit={onEditDateIdea}
+                          onArchive={onArchiveDateIdea}
+                          onUnarchive={onUnarchiveDateIdea}
+                          isArchived
+                        />
+                      ))}
+                    </CollapsibleGroup>
+                  ) : null}
+                </div>
+              )}
+            </div>
           </SectionCard>
         </div>
       </div>
