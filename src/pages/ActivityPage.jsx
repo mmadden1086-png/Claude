@@ -55,7 +55,7 @@ export function ActivityPage({
   const draggingTasks = sections?.draggingTasks ?? []
   const repeatSuggestions = sections?.repeatSuggestions ?? []
   const dateIdeasById = Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea]))
-  const lastCheckInDate = toDate(currentUser.lastCheckInAt)
+  const lastCheckInDate = toDate(currentUser.checkIn?.lastCompletedAt ?? currentUser.lastCheckInAt)
   const lastDateNight = dateNightSummary.lastDate
 
   function handleDrilldown(view) {

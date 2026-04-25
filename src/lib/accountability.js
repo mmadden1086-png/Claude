@@ -69,7 +69,7 @@ function writeStoredBanner(entry) {
 export function getAccountabilitySignals({ currentUser, tasks = [], monthlyDateStatus, now = new Date() }) {
   if (!currentUser) return null
 
-  const daysSinceLastCheckIn = daysBetween(toDate(currentUser.lastCheckInAt), now)
+  const daysSinceLastCheckIn = daysBetween(toDate(currentUser.checkIn?.lastCompletedAt ?? currentUser.lastCheckInAt), now)
   const untouchedPartnerTasks = tasks
     .filter((task) => isUntouchedPartnerTask(task, currentUser, now))
     .map((task) => ({ ...task, accountabilityAgeDays: taskAgeDays(task, now) }))

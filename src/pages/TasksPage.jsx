@@ -90,6 +90,7 @@ export function TasksPage({
   taskMotionState,
   onWeeklyReassign,
   onCheckInComplete,
+  checkInPrepOpenToken,
   recentDates,
   dateIdeas,
 }) {
@@ -105,6 +106,7 @@ export function TasksPage({
   })
   const [searchQuery, setSearchQuery] = useState('')
   const [isSubmittingInline, setIsSubmittingInline] = useState(false)
+  const [dismissedCheckInPrepToken, setDismissedCheckInPrepToken] = useState(0)
   const allSorted = useMemo(() => selection?.allSorted ?? [], [selection])
   const snoozedTasks = useMemo(
     () => filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && isSnoozed(task)),
@@ -175,7 +177,8 @@ export function TasksPage({
   const noFilterMatches = !searchQuery && filterId !== 'all' && activeCount === 0 && totalOpenCount > 0
   const draggingCount = visibleDraggingTasks.length
   const shouldAutoExpandUtilities = draggingCount > 0 || filteredTasks.some((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED)
-  const utilitiesVisible = utilitiesOpen || (shouldAutoExpandUtilities && !utilitiesDismissed)
+  const checkInPrepForcedOpen = Boolean(checkInPrepOpenToken) && dismissedCheckInPrepToken !== checkInPrepOpenToken
+  const utilitiesVisible = utilitiesOpen || checkInPrepForcedOpen || (shouldAutoExpandUtilities && !utilitiesDismissed)
   const utilitiesSummaryLabel = draggingCount > 0
     ? `${draggingCount} need attention`
     : `${visibleUpcomingTasks.length} coming up`
@@ -293,6 +296,7 @@ export function TasksPage({
                   if (utilitiesVisible) {
                     setUtilitiesOpen(false)
                     setUtilitiesDismissed(true)
+                    setDismissedCheckInPrepToken(checkInPrepOpenToken ?? 0)
                     return
                   }
                   setUtilitiesOpen(true)
@@ -327,7 +331,7 @@ export function TasksPage({
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-ink">Check-in prep</p>
-                          <p className="text-xs text-slate-500">Review what moved, what slipped, and what needs discussion.</p>
+                          <p className="text-xs text-slate-500">This is what you'll walk into the check-in with</p>
                         </div>
                         <span className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600">{draggingCount}</span>
                       </div>
