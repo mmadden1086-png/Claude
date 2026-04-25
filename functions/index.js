@@ -577,19 +577,63 @@ export const sendNotification = onCall({ region: 'us-central1' }, async (request
   }
 })
 
-// ── Smart notification helpers ────────────────────────────────────────────────
+// ── Adaptive notification system ─────────────────────────────────────────────
 
-const NOTIF_COOLDOWN_MS = {
-  checkin: 24 * 60 * 60 * 1000,
-  'date-night': 48 * 60 * 60 * 1000,
-  'partner-tasks': 24 * 60 * 60 * 1000,
+const MESSAGE_POOLS = {
+  checkIn: {
+    low: [
+      'Coming up on a week since your last check-in.',
+      'Almost a week — worth scheduling a check-in soon.',
+      "It's been a few days. A quick check-in would help.",
+    ],
+    medium: [
+      "It's been over a week since your last check-in.",
+      'A week and change without a check-in. Things can drift.',
+      'Your check-in is overdue. Pick a time this week.',
+    ],
+    high: [
+      "It's been over two weeks. A lot can pile up unspoken.",
+      'Two weeks without a check-in — time to reconnect.',
+      'Been a while. A check-in now could prevent bigger friction later.',
+    ],
+  },
+  dateNight: {
+    low: [
+      'No date night in a few weeks — good time to plan one.',
+      "It's been a while since your last date night.",
+      'Three weeks since a date night. Worth scheduling something.',
+    ],
+    medium: [
+      "It's been over a month without a date night.",
+      'Getting close to five weeks since your last date.',
+      'Time slips by — over a month and no date night yet.',
+    ],
+    high: [
+      'Nearly two months since your last date night.',
+      "It's been a long stretch. A date night is overdue.",
+      'Seven weeks without a date night — make some time.',
+    ],
+  },
+  partnerTasks: {
+    low: [
+      "A couple things she added are still waiting on you.",
+      "She added some tasks that haven't been touched yet.",
+      'A few items from her are sitting in your queue.',
+    ],
+    medium: [
+      'Several things she requested have been waiting a while.',
+      'Partner tasks are piling up. Worth clearing some today.',
+      "She added a few things — they've been sitting for days.",
+    ],
+    high: [
+      'Tasks she added have been waiting over a week.',
+      'A lot of what she requested is still untouched.',
+      'Her tasks are really overdue now — five or more pending.',
+    ],
+  },
 }
 
-const NOTIF_FIELD = {
-  checkin: 'checkinLastSentAt',
-  'date-night': 'dateNightLastSentAt',
-  'partner-tasks': 'partnerTasksLastSentAt',
-}
+const SEVERITY_RANK = { low: 1, medium: 2, high: 3 }
 
 function isWithinSendWindow(now) {
   const hour = parseInt(
@@ -603,59 +647,60 @@ function isWithinSendWindow(now) {
   return hour >= 8 && hour < 20
 }
 
-function cooledDown(kind, notifications, now) {
-  const field = NOTIF_FIELD[kind]
-  const lastSent = notifications?.[field]?.toDate?.()
-  if (!lastSent) return true
-  return now - lastSent > NOTIF_COOLDOWN_MS[kind]
-}
-
-function checkInSignal(daysSince) {
-  if (daysSince >= 9)
-    return { kind: 'checkin', level: 3, body: "It's been over a week since your last check-in — things pile up fast." }
-  if (daysSince >= 7)
-    return { kind: 'checkin', level: 2, body: "You're over a week out from your last check-in. Worth catching up soon." }
-  if (daysSince >= 6) return { kind: 'checkin', level: 1, body: 'Coming up on a week since your last check-in.' }
+function checkInSeverity(daysSince) {
+  if (daysSince >= 11) return 'high'
+  if (daysSince >= 8) return 'medium'
+  if (daysSince >= 6) return 'low'
   return null
 }
 
-function dateNightSignal(now, dateCompletedThisMonth) {
-  if (dateCompletedThisMonth) return null
-  const dayOfMonth = now.getDate()
-  if (dayOfMonth >= 20)
-    return { kind: 'date-night', level: 2, body: "Still no date night this month and the month's almost over." }
-  if (dayOfMonth >= 10)
-    return { kind: 'date-night', level: 1, body: "Halfway through the month and no date night yet." }
+function dateNightSeverity(daysSince) {
+  if (daysSince === null) return null
+  if (daysSince >= 50) return 'high'
+  if (daysSince >= 35) return 'medium'
+  if (daysSince >= 20) return 'low'
   return null
 }
 
-function partnerTaskSignal(maxStaleDays) {
-  if (maxStaleDays >= 5)
-    return { kind: 'partner-tasks', level: 2, body: 'Some things she added have been waiting on you for a while.' }
-  if (maxStaleDays >= 3)
-    return { kind: 'partner-tasks', level: 1, body: "A couple things she added haven't been touched yet." }
+function partnerTasksSeverity(count) {
+  if (count >= 5) return 'high'
+  if (count >= 3) return 'medium'
+  if (count >= 1) return 'low'
   return null
 }
 
-function buildMessage(signals) {
-  if (!signals.length) return null
-  if (signals.length === 1) return signals[0].body
-  const parts = []
-  for (const s of signals) {
-    if (s.kind === 'checkin') parts.push('check-in is overdue')
-    else if (s.kind === 'date-night') parts.push('no date night this month')
-    else if (s.kind === 'partner-tasks') parts.push("partner's tasks waiting")
-  }
-  return `A few things need attention: ${parts.join(', ')}.`
+function pickMessage(pool, lastMessage) {
+  const candidates = pool.filter((m) => m !== lastMessage)
+  const source = candidates.length ? candidates : pool
+  return source[Math.floor(Math.random() * source.length)]
 }
 
-function getReadySignals(rawSignals, notifications, now) {
-  return rawSignals.filter((s) => s && cooledDown(s.kind, notifications, now))
+// Returns { title, body, type, severity } for the highest-severity active issue,
+// or null if nothing warrants a notification.
+function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, lastMessage) {
+  const candidates = []
+
+  const checkInSev = daysSinceCheckIn !== null ? checkInSeverity(daysSinceCheckIn) : null
+  if (checkInSev) candidates.push({ type: 'checkIn', severity: checkInSev, rank: SEVERITY_RANK[checkInSev] })
+
+  const dateNightSev = dateNightSeverity(daysSinceDateNight)
+  if (dateNightSev) candidates.push({ type: 'dateNight', severity: dateNightSev, rank: SEVERITY_RANK[dateNightSev] })
+
+  const partnerSev = partnerTasksSeverity(staleCount)
+  if (partnerSev) candidates.push({ type: 'partnerTasks', severity: partnerSev, rank: SEVERITY_RANK[partnerSev] })
+
+  if (!candidates.length) return null
+
+  const top = candidates.reduce((best, c) => (c.rank > best.rank ? c : best))
+  const pool = MESSAGE_POOLS[top.type][top.severity]
+  const body = pickMessage(pool, lastMessage)
+
+  return { title: 'Follow Through', body, type: top.type, severity: top.severity }
 }
 
-// Batched smart reminders — runs daily at 9 AM Pacific.
-// Collects check-in, date-night, and partner-task signals; throttles per type;
-// batches into one notification per user; dedupes against the last message sent.
+// Adaptive daily reminders — runs at 9 AM Pacific.
+// Picks the highest-severity issue per user, selects a random non-repeat message
+// from that tier's pool, and enforces a 24h global cooldown + dedupe.
 export const smartDailyCheck = onSchedule(
   { schedule: '0 9 * * *', timeZone: 'America/Los_Angeles' },
   async () => {
@@ -663,16 +708,21 @@ export const smartDailyCheck = onSchedule(
     if (!isWithinSendWindow(now)) return
 
     const oneDayMs = 24 * 60 * 60 * 1000
+    const cooldownMs = 24 * 60 * 60 * 1000
 
+    // Find the most recent completed date night across all history.
     const dateHistorySnapshot = await db.collection('dateHistory').get()
-    const dateCompletedThisMonth = dateHistorySnapshot.docs.some((histDoc) => {
+    let latestDateNight = null
+    for (const histDoc of dateHistorySnapshot.docs) {
       const data = histDoc.data()
       const completedAt =
         data.dateCompleted?.toDate?.() ??
         (data.dateCompleted ? new Date(data.dateCompleted) : null)
-      if (!completedAt || Number.isNaN(completedAt.getTime())) return false
-      return completedAt.getFullYear() === now.getFullYear() && completedAt.getMonth() === now.getMonth()
-    })
+      if (completedAt && !Number.isNaN(completedAt.getTime())) {
+        if (!latestDateNight || completedAt > latestDateNight) latestDateNight = completedAt
+      }
+    }
+    const daysSinceDateNight = latestDateNight ? Math.floor((now - latestDateNight) / oneDayMs) : null
 
     const usersSnapshot = await db.collection('users').get()
     await Promise.all(
@@ -682,7 +732,11 @@ export const smartDailyCheck = onSchedule(
 
         const notifications = user.notifications ?? {}
 
-        // ── Collect signals ──────────────────────────────────────────────
+        // ── Fatigue control: global 24h cooldown ─────────────────────────
+        const lastSentAt = notifications.lastSentAt?.toDate?.()
+        if (lastSentAt && now - lastSentAt < cooldownMs) return
+
+        // ── Inputs ───────────────────────────────────────────────────────
         const lastCheckIn =
           user.checkIn?.lastCompletedAt?.toDate?.() ??
           (user.lastCheckInAt ? new Date(user.lastCheckInAt) : null)
@@ -696,44 +750,39 @@ export const smartDailyCheck = onSchedule(
           .where('assignedTo', '==', userDoc.id)
           .where('isCompleted', '==', false)
           .get()
-        const staleDays = tasksSnapshot.docs
+        const staleCount = tasksSnapshot.docs
           .map((taskDoc) => taskDoc.data())
           .filter((task) => {
             if (!task.requestedBy || task.requestedBy === userDoc.id) return false
             const createdAt =
               task.createdAt?.toDate?.() ?? (task.createdAt ? new Date(task.createdAt) : null)
-            return createdAt && !Number.isNaN(createdAt.getTime())
-          })
-          .map((task) => {
-            const createdAt = task.createdAt?.toDate?.() ?? new Date(task.createdAt)
-            return Math.floor((now - createdAt) / oneDayMs)
-          })
-        const maxStaleDays = staleDays.length ? Math.max(...staleDays) : 0
+            if (!createdAt || Number.isNaN(createdAt.getTime())) return false
+            return Math.floor((now - createdAt) / oneDayMs) >= 3
+          }).length
 
-        const rawSignals = [
-          daysSinceCheckIn !== null ? checkInSignal(daysSinceCheckIn) : null,
-          dateNightSignal(now, dateCompletedThisMonth),
-          maxStaleDays > 0 ? partnerTaskSignal(maxStaleDays) : null,
-        ]
+        const lastMessage = notifications.lastMessage ?? null
 
-        // ── Filter by throttle ───────────────────────────────────────────
-        const readySignals = getReadySignals(rawSignals.filter(Boolean), notifications, now)
-        if (!readySignals.length) return
+        // ── Build notification ───────────────────────────────────────────
+        const notif = buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, lastMessage)
+        if (!notif) return
 
-        // ── Build and dedupe ─────────────────────────────────────────────
-        const message = buildMessage(readySignals)
-        if (!message) return
-        if (notifications.lastMessage === message) return
+        // ── Dedupe ───────────────────────────────────────────────────────
+        if (notif.body === lastMessage) return
 
         // ── Send ─────────────────────────────────────────────────────────
-        await sendToUser(userDoc.id, 'Follow Through', message, { kind: 'smart-daily' })
+        await sendToUser(userDoc.id, notif.title, notif.body, {
+          kind: 'smart-daily',
+          type: notif.type,
+          severity: notif.severity,
+        })
 
-        // ── Update throttle timestamps ───────────────────────────────────
-        const updates = { 'notifications.lastMessage': message }
-        for (const s of readySignals) {
-          updates[`notifications.${NOTIF_FIELD[s.kind]}`] = admin.firestore.FieldValue.serverTimestamp()
-        }
-        await db.collection('users').doc(userDoc.id).update(updates)
+        // ── Persist ──────────────────────────────────────────────────────
+        await db.collection('users').doc(userDoc.id).update({
+          'notifications.lastSentAt': admin.firestore.FieldValue.serverTimestamp(),
+          'notifications.lastMessage': notif.body,
+          'notifications.lastType': notif.type,
+          'notifications.lastSeverity': notif.severity,
+        })
       }),
     )
   },
