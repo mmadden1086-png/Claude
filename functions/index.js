@@ -455,41 +455,63 @@ Return JSON:
 
 export const onTaskCreated = onDocumentCreated('tasks/{taskId}', async (event) => {
   const task = event.data?.data()
-  if (!task) return
+  if (!task || !task.requestedBy) return
+  if (!task.assignedTo || task.assignedTo === task.requestedBy) return
 
-  if (task.assignedTo && task.assignedTo !== task.requestedBy) {
-    const requesterSnapshot = await db.collection('users').doc(task.requestedBy).get()
-    const requester = requesterSnapshot.data()
-    await sendToUser(
-      task.assignedTo,
-      'Follow Through',
-      `${requester?.name ?? 'Your partner'} assigned: ${task.title}`,
-      { taskId: event.params.taskId, kind: 'assigned' },
-    )
+  const requesterSnapshot = await db.collection('users').doc(task.requestedBy).get()
+  const fromName = requesterSnapshot.data()?.name ?? 'Your partner'
+  const taskTitle = normalizeTaskTitle(task.title)
+
+  if (task.assignedTo === 'both') {
+    const usersSnapshot = await db.collection('users').get()
+    const partner = usersSnapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .find((user) => user.id !== task.requestedBy)
+    if (partner) {
+      await sendToUser(partner.id, 'Follow Through', `${fromName} added: ${taskTitle}`, { taskId: event.params.taskId, kind: 'assigned' })
+    }
+  } else {
+    await sendToUser(task.assignedTo, 'Follow Through', `${fromName} added: ${taskTitle}`, { taskId: event.params.taskId, kind: 'assigned' })
   }
 })
 
-export const onTaskCompleted = onDocumentUpdated('tasks/{taskId}', async (event) => {
+export const onTaskUpdated = onDocumentUpdated('tasks/{taskId}', async (event) => {
   const before = event.data?.before.data()
   const after = event.data?.after.data()
   if (!before || !after) return
 
+  const taskTitle = normalizeTaskTitle(after.title)
+
   if (!before.isCompleted && after.isCompleted) {
     const points = POINTS_BY_EFFORT[after.effort] ?? 1
-    const userRef = db.collection('users').doc(after.assignedTo)
+    const assignedToSingle = after.assignedTo && after.assignedTo !== 'both' ? after.assignedTo : null
 
-    await db.runTransaction(async (transaction) => {
-      const userSnapshot = await transaction.get(userRef)
-      const user = userSnapshot.data() ?? {}
-      transaction.set(
-        userRef,
-        {
+    if (assignedToSingle) {
+      const userRef = db.collection('users').doc(assignedToSingle)
+      await db.runTransaction(async (transaction) => {
+        const userSnapshot = await transaction.get(userRef)
+        const user = userSnapshot.data() ?? {}
+        transaction.set(userRef, {
           totalPoints: (user.totalPoints ?? 0) + points,
           weeklyPoints: (user.weeklyPoints ?? 0) + points,
-        },
-        { merge: true },
-      )
-    })
+        }, { merge: true })
+      })
+
+      if (after.requestedBy && after.requestedBy !== assignedToSingle) {
+        const assigneeSnap = await db.collection('users').doc(assignedToSingle).get()
+        const assigneeName = assigneeSnap.data()?.name ?? 'Your partner'
+        await sendToUser(after.requestedBy, 'Follow Through', `${assigneeName} completed: ${taskTitle}`, { taskId: event.params.taskId, kind: 'completed' })
+      }
+    }
+  }
+
+  if (before.assignedTo !== after.assignedTo && after.assignedTo && after.requestedBy) {
+    const newAssignee = after.assignedTo
+    if (newAssignee !== 'both' && newAssignee !== after.requestedBy) {
+      const requesterSnap = await db.collection('users').doc(after.requestedBy).get()
+      const fromName = requesterSnap.data()?.name ?? 'Your partner'
+      await sendToUser(newAssignee, 'Follow Through', `${fromName} assigned you: ${taskTitle}`, { taskId: event.params.taskId, kind: 'reassigned' })
+    }
   }
 })
 
