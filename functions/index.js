@@ -61,6 +61,52 @@ function parseAccountabilityContent(content, condition) {
   }
 }
 
+function fallbackCheckInTasks(payload = {}) {
+  const sourceTasks = [
+    ...(Array.isArray(payload.overdueTasks) ? payload.overdueTasks : []),
+    ...(Array.isArray(payload.partnerTasks) ? payload.partnerTasks : []),
+    ...(Array.isArray(payload.discussionTasks) ? payload.discussionTasks : []),
+  ]
+  const seen = new Set()
+
+  return sourceTasks
+    .filter((task) => task?.title && !seen.has(task.title.toLowerCase()) && seen.add(task.title.toLowerCase()))
+    .slice(0, 3)
+    .map((task) => ({
+      title: `Decide next step for ${task.title}`,
+      reason: 'Keeps this from staying unresolved after the check-in',
+      assignedTo: task.assignedTo || 'both',
+      category: task.category || 'Home',
+      effort: 'Quick',
+      doneWhen: `Next step for ${task.title} is clear`,
+      why: 'So it has a clear path forward',
+    }))
+}
+
+function parseCheckInTasksContent(content, payload) {
+  try {
+    const parsed = JSON.parse(content)
+    const tasks = Array.isArray(parsed.tasks) ? parsed.tasks : []
+    const cleaned = tasks
+      .map((task) => ({
+        title: typeof task.title === 'string' ? task.title.trim() : '',
+        reason: typeof task.reason === 'string' ? task.reason.trim() : '',
+        assignedTo: typeof task.assignedTo === 'string' ? task.assignedTo.trim() : 'both',
+        category: typeof task.category === 'string' ? task.category.trim() : 'Home',
+        effort: typeof task.effort === 'string' ? task.effort.trim() : 'Quick',
+        doneWhen: typeof task.doneWhen === 'string' ? task.doneWhen.trim() : '',
+        why: typeof task.why === 'string' ? task.why.trim() : '',
+      }))
+      .filter((task) => task.title)
+      .slice(0, 3)
+
+    return cleaned.length ? cleaned : fallbackCheckInTasks(payload)
+  } catch (error) {
+    console.error('Could not parse OpenAI check-in task JSON.', error)
+    return fallbackCheckInTasks(payload)
+  }
+}
+
 async function sendToUser(userId, title, body, data = {}) {
   if (!userId) return
   const userSnapshot = await db.collection('users').doc(userId).get()
@@ -246,6 +292,82 @@ Count: ${condition.count}`,
   } catch (error) {
     console.error('OpenAI accountability message failed.', error)
     response.status(200).json({ message: fallbackAccountabilityMessage(condition) })
+  }
+})
+
+export const suggestCheckInTasks = onRequest({ region: 'us-central1', cors: true }, async (request, response) => {
+  if (request.method === 'OPTIONS') {
+    response.status(204).send('')
+    return
+  }
+
+  if (request.method !== 'POST') {
+    response.set('Allow', 'POST')
+    response.status(405).json({ error: 'Method not allowed' })
+    return
+  }
+
+  const payload = {
+    currentUserName: typeof request.body?.currentUserName === 'string' ? request.body.currentUserName : 'You',
+    partnerName: typeof request.body?.partnerName === 'string' ? request.body.partnerName : 'Partner',
+    completedTasks: Array.isArray(request.body?.completedTasks) ? request.body.completedTasks.slice(0, 5) : [],
+    overdueTasks: Array.isArray(request.body?.overdueTasks) ? request.body.overdueTasks.slice(0, 5) : [],
+    partnerTasks: Array.isArray(request.body?.partnerTasks) ? request.body.partnerTasks.slice(0, 5) : [],
+    discussionTasks: Array.isArray(request.body?.discussionTasks) ? request.body.discussionTasks.slice(0, 5) : [],
+  }
+
+  try {
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY is not configured.')
+    }
+
+    const openai = new OpenAI({ apiKey })
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      max_tokens: 220,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You suggest concrete follow-through tasks after a weekly partner check-in.
+
+Rules:
+- Return 1 to 3 tasks max.
+- Make each task a small next action, not a summary.
+- Keep titles short and real-world.
+- Use neutral language.
+- Do not use guilt, blame, productivity language, or system language.
+- Prefer tasks that resolve overdue, partner-requested, or discussion items.
+
+Return JSON:
+{
+  "tasks": [
+    {
+      "title": string,
+      "reason": string,
+      "assignedTo": "both" | "currentUser" | "partner",
+      "category": "Home" | "Kids" | "Money" | "Relationship" | "Health" | "Errands",
+      "effort": "Quick" | "Medium" | "Heavy",
+      "doneWhen": string,
+      "why": string
+    }
+  ]
+}`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(payload),
+        },
+      ],
+    })
+
+    const content = completion.choices[0]?.message?.content ?? ''
+    response.status(200).json({ tasks: parseCheckInTasksContent(content, payload) })
+  } catch (error) {
+    console.error('OpenAI check-in task suggestions failed.', error)
+    response.status(200).json({ tasks: fallbackCheckInTasks(payload) })
   }
 })
 

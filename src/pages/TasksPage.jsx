@@ -4,7 +4,8 @@ import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { QuickAddCard } from '../components/QuickAddCard'
 import { TaskCard } from '../components/TaskCard'
-import { FILTERS, TASK_STATUS } from '../lib/constants'
+import { BOTH_ASSIGNEE_ID, FILTERS, TASK_STATUS } from '../lib/constants'
+import { fetchCheckInTaskSuggestions } from '../lib/check-in-ai'
 import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 
@@ -76,6 +77,7 @@ export function TasksPage({
   sections,
   filteredTasks,
   currentUser,
+  partner,
   users,
   usersById,
   tasks,
@@ -107,6 +109,9 @@ export function TasksPage({
   const [searchQuery, setSearchQuery] = useState('')
   const [isSubmittingInline, setIsSubmittingInline] = useState(false)
   const [dismissedCheckInPrepToken, setDismissedCheckInPrepToken] = useState(0)
+  const [checkInSuggestions, setCheckInSuggestions] = useState([])
+  const [checkInSuggestionsBusy, setCheckInSuggestionsBusy] = useState(false)
+  const [addedSuggestionTitles, setAddedSuggestionTitles] = useState([])
   const allSorted = useMemo(() => selection?.allSorted ?? [], [selection])
   const snoozedTasks = useMemo(
     () => filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && isSnoozed(task)),
@@ -200,6 +205,40 @@ export function TasksPage({
     return undefined
   }, [utilitiesDismissed])
 
+  useEffect(() => {
+    if (!utilitiesVisible) return undefined
+    const abortController = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      setCheckInSuggestionsBusy(true)
+      try {
+        const suggestions = await fetchCheckInTaskSuggestions(
+          {
+            currentUser,
+            partner,
+            completedTasks: completedLastWeek,
+            overdueTasks,
+            partnerTasks,
+            discussionTasks,
+          },
+          abortController.signal,
+        )
+        if (!abortController.signal.aborted) setCheckInSuggestions(suggestions)
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.warn('AI check-in task suggestions failed.', error)
+          if (!abortController.signal.aborted) setCheckInSuggestions([])
+        }
+      } finally {
+        if (!abortController.signal.aborted) setCheckInSuggestionsBusy(false)
+      }
+    }, 300)
+
+    return () => {
+      abortController.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [completedLastWeek, currentUser, discussionTasks, overdueTasks, partner, partnerTasks, utilitiesVisible])
+
   async function handleInlineSubmit(event) {
     if (event.key !== 'Enter') return
     if (!searchQuery.trim() || isSubmittingInline) return
@@ -225,6 +264,33 @@ export function TasksPage({
       }
     } finally {
       setIsSubmittingInline(false)
+    }
+  }
+
+  function resolveSuggestionAssignee(value) {
+    if (value === 'currentUser') return currentUser.id
+    if (value === 'partner') return partner?.id ?? BOTH_ASSIGNEE_ID
+    if (value === 'both') return BOTH_ASSIGNEE_ID
+    return value || BOTH_ASSIGNEE_ID
+  }
+
+  async function handleAddCheckInSuggestion(suggestion) {
+    const result = await onQuickAdd?.({
+      title: suggestion.title,
+      notes: suggestion.reason || '',
+      assignedTo: resolveSuggestionAssignee(suggestion.assignedTo),
+      dueDate: '',
+      dueTime: '',
+      urgency: 'This week',
+      effort: ['Quick', 'Medium', 'Heavy'].includes(suggestion.effort) ? suggestion.effort : 'Quick',
+      category: suggestion.category || 'Home',
+      clarity: suggestion.doneWhen || '',
+      whyThisMatters: suggestion.why || suggestion.reason || '',
+      repeatType: 'none',
+      repeatDays: [],
+    })
+    if (!result?.blocked) {
+      setAddedSuggestionTitles((current) => [...current, suggestion.title])
     }
   }
 
@@ -368,6 +434,37 @@ export function TasksPage({
                           {lastDateNight.notes ? <p className="mt-1 text-xs text-accent/80">{lastDateNight.notes}</p> : null}
                         </div>
                       ) : null}
+                      <div className="mb-3 rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">AI suggested tasks</p>
+                          {checkInSuggestionsBusy ? <span className="text-xs text-slate-500">Thinking...</span> : null}
+                        </div>
+                        <div className="mt-2 space-y-2">
+                          {checkInSuggestions.length ? (
+                            checkInSuggestions.map((suggestion) => {
+                              const added = addedSuggestionTitles.includes(suggestion.title)
+                              return (
+                                <div key={suggestion.title} className="rounded-2xl bg-canvas p-3">
+                                  <p className="text-sm font-medium text-ink">{suggestion.title}</p>
+                                  {suggestion.reason ? <p className="mt-1 text-xs text-slate-500">{suggestion.reason}</p> : null}
+                                  <button
+                                    className={`mt-3 rounded-2xl px-3 py-2 text-xs font-semibold transition duration-150 active:scale-[0.98] ${added ? 'bg-white text-slate-500' : 'bg-accent text-white'}`}
+                                    type="button"
+                                    disabled={added}
+                                    onClick={() => handleAddCheckInSuggestion(suggestion)}
+                                  >
+                                    {added ? 'Added' : 'Add task'}
+                                  </button>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <p className="text-sm text-slate-500">
+                              {checkInSuggestionsBusy ? 'Looking for useful next steps.' : 'No AI suggestions needed right now.'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
                       {visibleDraggingTasks.length ? (
                         <div className="space-y-3">
                           {visibleDraggingTasks.slice(0, 2).map((task) => (

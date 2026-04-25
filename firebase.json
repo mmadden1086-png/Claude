@@ -29,6 +29,13 @@
         }
       },
       {
+        "source": "/suggestCheckInTasks",
+        "function": {
+          "functionId": "suggestCheckInTasks",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
