@@ -4,7 +4,8 @@ import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { QuickAddCard } from '../components/QuickAddCard'
 import { TaskCard } from '../components/TaskCard'
-import { FILTERS, TASK_STATUS } from '../lib/constants'
+import { BOTH_ASSIGNEE_ID, FILTERS, TASK_STATUS } from '../lib/constants'
+import { fetchCheckInTaskSuggestions } from '../lib/check-in-ai'
 import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 
@@ -50,23 +51,50 @@ function isTodayBucketTask(task) {
   return false
 }
 
+function isCompletedWithinDays(task, days) {
+  const completedAt = toDate(task.completedAt)
+  if (!completedAt) return false
+  const diff = differenceInCalendarDays(new Date(), completedAt)
+  return diff >= 0 && diff <= days
+}
+
+function isOverdueByDays(task, days) {
+  const dueDate = toDate(task.dueDate)
+  if (!dueDate) return false
+  return differenceInCalendarDays(new Date(), dueDate) > days
+}
+
+function compactTaskRow(task, onOpenTask) {
+  return (
+    <button key={task.id} className="w-full rounded-2xl bg-canvas px-3 py-2 text-left text-sm text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenTask(task.id)}>
+      {task.title}
+    </button>
+  )
+}
+
 export function TasksPage({
   selection,
   sections,
   filteredTasks,
   currentUser,
+  partner,
   users,
   usersById,
   tasks,
   filterId,
   setFilterId,
   quickAddExpanded,
+  quickAddDefaults,
   setQuickAddExpanded,
   onQuickAdd,
   onTaskAction,
   onOpenTask,
   taskMotionState,
   onWeeklyReassign,
+  onCheckInComplete,
+  checkInPrepOpenToken,
+  recentDates,
+  dateIdeas,
 }) {
   const [activeSegment, setActiveSegment] = useState('all')
   const [quickActionMode, setQuickActionMode] = useState('normal')
@@ -80,6 +108,10 @@ export function TasksPage({
   })
   const [searchQuery, setSearchQuery] = useState('')
   const [isSubmittingInline, setIsSubmittingInline] = useState(false)
+  const [dismissedCheckInPrepToken, setDismissedCheckInPrepToken] = useState(0)
+  const [checkInSuggestions, setCheckInSuggestions] = useState([])
+  const [checkInSuggestionsBusy, setCheckInSuggestionsBusy] = useState(false)
+  const [addedSuggestionTitles, setAddedSuggestionTitles] = useState([])
   const allSorted = useMemo(() => selection?.allSorted ?? [], [selection])
   const snoozedTasks = useMemo(
     () => filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && isSnoozed(task)),
@@ -115,13 +147,43 @@ export function TasksPage({
     () => (selection?.checkIn ?? selection?.dragging ?? sections?.draggingTasks ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
     [searchQuery, sections?.draggingTasks, selection],
   )
+  const completedLastWeek = useMemo(
+    () => tasks.filter((task) => getTaskStatus(task) === TASK_STATUS.COMPLETED && isCompletedWithinDays(task, 7)).slice(0, 4),
+    [tasks],
+  )
+  const overdueTasks = useMemo(
+    () => allVisibleTasks.filter((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED).slice(0, 4),
+    [allVisibleTasks],
+  )
+  const partnerTasks = useMemo(
+    () => allVisibleTasks.filter((task) => task.requestedBy && task.requestedBy !== currentUser.id && getTaskStatus(task) !== TASK_STATUS.COMPLETED).slice(0, 4),
+    [allVisibleTasks, currentUser.id],
+  )
+  const discussionTasks = useMemo(() => {
+    const seen = new Set()
+    return allVisibleTasks
+      .filter((task) => {
+        const status = getTaskStatus(task)
+        const partnerUntouched = task.requestedBy && task.requestedBy !== currentUser.id && !task.acknowledgedAt && !task.startedAt
+        return status !== TASK_STATUS.COMPLETED && (isOverdueByDays(task, 3) || partnerUntouched)
+      })
+      .filter((task) => {
+        if (seen.has(task.id)) return false
+        seen.add(task.id)
+        return true
+      })
+      .slice(0, 4)
+  }, [allVisibleTasks, currentUser.id])
+  const dateIdeasById = useMemo(() => Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea])), [dateIdeas])
+  const lastDateNight = recentDates?.[0] ?? null
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const totalOpenCount = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const filterLabel = FILTERS.find((filter) => filter.id === filterId)?.label ?? 'current'
-  const noFilterMatches = !searchQuery && filterId !== 'all' && activeCount === 0 && totalOpenCount > 0
+  const noFilterMatches = !searchQuery && filterId !== 'all' && allSorted.length === 0 && totalOpenCount > 0
   const draggingCount = visibleDraggingTasks.length
   const shouldAutoExpandUtilities = draggingCount > 0 || filteredTasks.some((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED)
-  const utilitiesVisible = utilitiesOpen || (shouldAutoExpandUtilities && !utilitiesDismissed)
+  const checkInPrepForcedOpen = Boolean(checkInPrepOpenToken) && dismissedCheckInPrepToken !== checkInPrepOpenToken
+  const utilitiesVisible = utilitiesOpen || checkInPrepForcedOpen || (shouldAutoExpandUtilities && !utilitiesDismissed)
   const utilitiesSummaryLabel = draggingCount > 0
     ? `${draggingCount} need attention`
     : `${visibleUpcomingTasks.length} coming up`
@@ -142,6 +204,40 @@ export function TasksPage({
     window.localStorage.setItem(TASK_UTILITIES_DISMISSED_STORAGE_KEY, String(utilitiesDismissed))
     return undefined
   }, [utilitiesDismissed])
+
+  useEffect(() => {
+    if (!utilitiesVisible) return undefined
+    const abortController = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      setCheckInSuggestionsBusy(true)
+      try {
+        const suggestions = await fetchCheckInTaskSuggestions(
+          {
+            currentUser,
+            partner,
+            completedTasks: completedLastWeek,
+            overdueTasks,
+            partnerTasks,
+            discussionTasks,
+          },
+          abortController.signal,
+        )
+        if (!abortController.signal.aborted) setCheckInSuggestions(suggestions)
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.warn('AI check-in task suggestions failed.', error)
+          if (!abortController.signal.aborted) setCheckInSuggestions([])
+        }
+      } finally {
+        if (!abortController.signal.aborted) setCheckInSuggestionsBusy(false)
+      }
+    }, 300)
+
+    return () => {
+      abortController.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [completedLastWeek, currentUser, discussionTasks, overdueTasks, partner, partnerTasks, utilitiesVisible])
 
   async function handleInlineSubmit(event) {
     if (event.key !== 'Enter') return
@@ -168,6 +264,33 @@ export function TasksPage({
       }
     } finally {
       setIsSubmittingInline(false)
+    }
+  }
+
+  function resolveSuggestionAssignee(value) {
+    if (value === 'currentUser') return currentUser.id
+    if (value === 'partner') return partner?.id ?? BOTH_ASSIGNEE_ID
+    if (value === 'both') return BOTH_ASSIGNEE_ID
+    return value || BOTH_ASSIGNEE_ID
+  }
+
+  async function handleAddCheckInSuggestion(suggestion) {
+    const result = await onQuickAdd?.({
+      title: suggestion.title,
+      notes: suggestion.reason || '',
+      assignedTo: resolveSuggestionAssignee(suggestion.assignedTo),
+      dueDate: '',
+      dueTime: '',
+      urgency: 'This week',
+      effort: ['Quick', 'Medium', 'Heavy'].includes(suggestion.effort) ? suggestion.effort : 'Quick',
+      category: suggestion.category || 'Home',
+      clarity: suggestion.doneWhen || '',
+      whyThisMatters: suggestion.why || suggestion.reason || '',
+      repeatType: 'none',
+      repeatDays: [],
+    })
+    if (!result?.blocked) {
+      setAddedSuggestionTitles((current) => [...current, suggestion.title])
     }
   }
 
@@ -239,6 +362,7 @@ export function TasksPage({
                   if (utilitiesVisible) {
                     setUtilitiesOpen(false)
                     setUtilitiesDismissed(true)
+                    setDismissedCheckInPrepToken(checkInPrepOpenToken ?? 0)
                     return
                   }
                   setUtilitiesOpen(true)
@@ -272,10 +396,74 @@ export function TasksPage({
                     <div className="rounded-3xl bg-white p-4">
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-ink">Check-in</p>
-                          <p className="text-xs text-slate-500">Fix the tasks that are dragging.</p>
+                          <p className="text-sm font-semibold text-ink">Check-in prep</p>
+                          <p className="text-xs text-slate-500">This is what you'll walk into the check-in with</p>
                         </div>
                         <span className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600">{draggingCount}</span>
+                      </div>
+                      <div className="mb-3 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Completed</p>
+                          <div className="mt-2 space-y-2">
+                            {completedLastWeek.length ? completedLastWeek.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">Nothing completed this week yet.</p>}
+                          </div>
+                        </div>
+                        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Overdue</p>
+                          <div className="mt-2 space-y-2">
+                            {overdueTasks.length ? overdueTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">No overdue tasks.</p>}
+                          </div>
+                        </div>
+                        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Partner tasks</p>
+                          <div className="mt-2 space-y-2">
+                            {partnerTasks.length ? partnerTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">No partner asks waiting.</p>}
+                          </div>
+                        </div>
+                        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">What needs discussion</p>
+                          <div className="mt-2 space-y-2">
+                            {discussionTasks.length ? discussionTasks.map((task) => compactTaskRow(task, onOpenTask)) : <p className="text-sm text-slate-500">Nothing needs a conversation.</p>}
+                          </div>
+                        </div>
+                      </div>
+                      {lastDateNight ? (
+                        <div className="mb-3 rounded-3xl bg-accentSoft p-3 text-sm text-accent">
+                          <p className="font-semibold">Last date night</p>
+                          <p>{dateIdeasById[lastDateNight.ideaId]?.title ?? lastDateNight.taskTitle ?? 'Date night'}{lastDateNight.rating ? ` - ${lastDateNight.rating}/5` : ''}</p>
+                          {lastDateNight.notes ? <p className="mt-1 text-xs text-accent/80">{lastDateNight.notes}</p> : null}
+                        </div>
+                      ) : null}
+                      <div className="mb-3 rounded-3xl bg-white p-3 ring-1 ring-slate-100">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">AI suggested tasks</p>
+                          {checkInSuggestionsBusy ? <span className="text-xs text-slate-500">Thinking...</span> : null}
+                        </div>
+                        <div className="mt-2 space-y-2">
+                          {checkInSuggestions.length ? (
+                            checkInSuggestions.map((suggestion) => {
+                              const added = addedSuggestionTitles.includes(suggestion.title)
+                              return (
+                                <div key={suggestion.title} className="rounded-2xl bg-canvas p-3">
+                                  <p className="text-sm font-medium text-ink">{suggestion.title}</p>
+                                  {suggestion.reason ? <p className="mt-1 text-xs text-slate-500">{suggestion.reason}</p> : null}
+                                  <button
+                                    className={`mt-3 rounded-2xl px-3 py-2 text-xs font-semibold transition duration-150 active:scale-[0.98] ${added ? 'bg-white text-slate-500' : 'bg-accent text-white'}`}
+                                    type="button"
+                                    disabled={added}
+                                    onClick={() => handleAddCheckInSuggestion(suggestion)}
+                                  >
+                                    {added ? 'Added' : 'Add task'}
+                                  </button>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <p className="text-sm text-slate-500">
+                              {checkInSuggestionsBusy ? 'Looking for useful next steps.' : 'No AI suggestions needed right now.'}
+                            </p>
+                          )}
+                        </div>
                       </div>
                       {visibleDraggingTasks.length ? (
                         <div className="space-y-3">
@@ -302,6 +490,13 @@ export function TasksPage({
                       ) : (
                         <div className="rounded-3xl bg-canvas px-4 py-4 text-sm text-slate-500">Nothing is dragging right now.</div>
                       )}
+                      <button
+                        className="mt-3 w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+                        type="button"
+                        onClick={onCheckInComplete}
+                      >
+                        Mark check-in complete
+                      </button>
                     </div>
 
                     <div className="rounded-3xl bg-white p-4">
@@ -417,10 +612,11 @@ export function TasksPage({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3 pt-0">
               <QuickAddCard
-                key={currentUser.id}
+                key={`${currentUser.id}:${JSON.stringify(quickAddDefaults ?? {})}`}
                 currentUser={currentUser}
                 users={users}
                 tasks={tasks}
+                defaults={quickAddDefaults}
                 onSubmit={onQuickAdd}
                 expanded
                 onExpandedChange={setQuickAddExpanded}
