@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { TASK_STATUS } from '../lib/constants'
 import { getTaskStatus } from '../lib/format'
 import { TaskCard } from '../components/TaskCard'
@@ -19,6 +20,7 @@ export function FocusPage({
   setQuickAddExpanded,
   taskMotionState,
 }) {
+  const navigate = useNavigate()
   const topTask = sections?.topTask ?? null
   const focusTask = sections?.focusTask ?? topTask
   const primaryTaskId = focusTask?.parentTaskId ?? focusTask?.id
@@ -70,13 +72,14 @@ export function FocusPage({
               </div>
             ) : null}
             <div className="rounded-[1.75rem] border border-white/70 bg-panel/95 p-4 shadow-card">
-              <h1 className="text-2xl font-semibold text-ink">No tasks right now</h1>
-              <div className="mt-4 flex gap-2 flex-wrap">
-                <button className="w-full rounded-2xl bg-accent px-4 py-4 text-sm font-semibold text-white transition duration-150 active:scale-[0.98] sm:flex-1" type="button" onClick={() => setQuickAddExpanded?.(true)}>
-                  Add task
+              <h1 className="text-2xl font-semibold text-ink">You're all caught up</h1>
+              <p className="mt-2 text-sm text-slate-500">Nothing active right now. Add something new or browse what's waiting.</p>
+              <div className="mt-4 flex flex-col gap-2">
+                <button className="w-full rounded-2xl bg-accent px-4 py-4 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={() => setQuickAddExpanded?.(true)}>
+                  Add a task
                 </button>
                 <button
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-700 transition duration-150 active:scale-[0.98] sm:flex-1"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-700 transition duration-150 active:scale-[0.98]"
                   type="button"
                   onClick={() => {
                     const fallbackQuickWin = sections?.quickWinTasks?.[0]
@@ -84,10 +87,10 @@ export function FocusPage({
                       onOpenTask(fallbackQuickWin.id)
                       return
                     }
-                    setQuickAddExpanded?.(true)
+                    navigate('/tasks')
                   }}
                 >
-                  Pick quick win
+                  {sections?.quickWinTasks?.length ? 'Pick a quick win' : 'View all tasks'}
                 </button>
               </div>
             </div>

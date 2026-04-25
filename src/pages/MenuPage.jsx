@@ -65,11 +65,43 @@ export function MenuPage({
       </SectionCard>
 
       <SectionCard title="Notifications" subtitle="Get reminders for upcoming tasks and daily summaries.">
-        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-semibold text-slate-700" type="button" onClick={onEnableNotifications}>
-          <span className="inline-flex items-center gap-2">
-            <Bell size={16} /> {notificationStatus === 'enabled' ? 'Notifications on' : notificationStatus === 'working' ? 'Checking...' : 'Enable notifications'}
-          </span>
-        </button>
+        {(() => {
+          const isError = ['blocked', 'unsupported', 'service-worker', 'config-error', 'install-required'].includes(notificationStatus)
+          const label = {
+            enabled: 'Notifications on',
+            working: 'Setting up…',
+            blocked: 'Notifications blocked',
+            unsupported: 'Not supported on this device',
+            'service-worker': 'Setup issue — try reloading',
+            'config-error': 'Not configured',
+            'install-required': 'Install app first',
+          }[notificationStatus] ?? 'Enable notifications'
+          const errorNote = {
+            blocked: 'Permission was denied. Open your browser settings and allow notifications for this site.',
+            unsupported: 'Your browser or device doesn\'t support push notifications.',
+            'service-worker': 'The notification service failed to start. Reload the app and try again.',
+            'config-error': 'Push notifications aren\'t fully set up yet.',
+            'install-required': 'Add this app to your home screen, then come back to enable notifications.',
+          }[notificationStatus]
+
+          return (
+            <>
+              <button
+                className={`w-full rounded-3xl px-4 py-4 text-left text-sm font-semibold ${isError ? 'bg-rose-50 text-rose-700' : notificationStatus === 'enabled' ? 'bg-accentSoft text-accent' : 'bg-white text-slate-700'}`}
+                type="button"
+                disabled={notificationStatus === 'working' || notificationStatus === 'enabled'}
+                onClick={onEnableNotifications}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Bell size={16} /> {label}
+                </span>
+              </button>
+              {errorNote ? (
+                <p className="px-1 text-xs text-rose-600">{errorNote}</p>
+              ) : null}
+            </>
+          )
+        })()}
         <div className="mt-3 space-y-3 text-sm text-slate-600">
           <div className="rounded-3xl bg-canvas p-4">Push alerts: assigned tasks, due-soon reminders, morning check-in, evening wrap-up.</div>
           <div className="rounded-3xl bg-canvas p-4">SMS: coming soon — high-reliability alerts for time-sensitive tasks.</div>

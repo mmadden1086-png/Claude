@@ -616,19 +616,19 @@ const MESSAGE_POOLS = {
   },
   partnerTasks: {
     low: [
-      "A couple things she added are still waiting on you.",
-      "She added some tasks that haven't been touched yet.",
-      'A few items from her are sitting in your queue.',
+      "A couple things your partner added are still waiting on you.",
+      "Your partner added some tasks that haven't been touched yet.",
+      'A few items from your partner are sitting in your queue.',
     ],
     medium: [
-      'Several things she requested have been waiting a while.',
+      'Several things your partner requested have been waiting a while.',
       'Partner tasks are piling up. Worth clearing some today.',
-      "She added a few things — they've been sitting for days.",
+      "Your partner added a few things — they've been sitting for days.",
     ],
     high: [
-      'Tasks she added have been waiting over a week.',
-      'A lot of what she requested is still untouched.',
-      'Her tasks are really overdue now — five or more pending.',
+      'Tasks your partner added have been waiting over a week.',
+      'A lot of what your partner requested is still untouched.',
+      "Your partner's tasks are really overdue — five or more pending.",
     ],
   },
 }

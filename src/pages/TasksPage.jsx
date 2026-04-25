@@ -197,26 +197,31 @@ export function TasksPage({
             }
           />
 
-          <label className="flex items-center gap-3 rounded-[1.75rem] border border-sand bg-white/95 px-4 py-3 text-slate-500 shadow-sm">
-            <Search size={16} />
-            <input
-              className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-slate-400"
-              type="search"
-              placeholder="Add or find a task"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              onKeyDown={handleInlineSubmit}
-            />
+          <div className="space-y-1">
+            <label className="flex items-center gap-3 rounded-[1.75rem] border border-sand bg-white/95 px-4 py-3 text-slate-500 shadow-sm">
+              <Search size={16} />
+              <input
+                className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-slate-400"
+                type="search"
+                placeholder="Search tasks"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={handleInlineSubmit}
+              />
+              {searchQuery ? (
+                <button className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={() => setSearchQuery('')}>
+                  Clear
+                </button>
+              ) : (
+                <button className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={() => setQuickAddExpanded(true)}>
+                  Add
+                </button>
+              )}
+            </label>
             {searchQuery ? (
-              <button className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={() => setSearchQuery('')}>
-                Clear
-              </button>
-            ) : (
-              <button className="rounded-full bg-canvas px-3 py-1 text-xs font-medium text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={() => setQuickAddExpanded(true)}>
-                Add
-              </button>
-            )}
-          </label>
+              <p className="px-2 text-xs text-slate-400">Press Enter to add "{searchQuery}" as a new task</p>
+            ) : null}
+          </div>
 
           <div className="grid grid-cols-5 gap-1 rounded-3xl bg-white p-1 shadow-sm">
             {SEGMENTS.map((segment) => (
