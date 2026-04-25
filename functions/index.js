@@ -20,18 +20,85 @@ const INVALID_TOKEN_ERRORS = new Set([
   'messaging/registration-token-not-registered',
 ])
 
+function normalizeTaskTitle(title = 'Task') {
+  return String(title || 'Task').trim().replace(/\s+/g, ' ')
+}
+
+function classifyTaskIntent(title = '') {
+  const normalized = title.toLowerCase()
+  if (/\b(call|text|email|message|ask|reply)\b/.test(normalized)) return 'communication'
+  if (/\b(schedule|book|plan|reserve|set up)\b/.test(normalized)) return 'planning'
+  if (/\b(pay|budget|bill|invoice|money)\b/.test(normalized)) return 'money'
+  if (/\b(clean|wash|fold|trash|dishes|laundry|organize)\b/.test(normalized)) return 'home'
+  if (/\b(buy|pick up|get|order)\b/.test(normalized)) return 'errand'
+  if (/\b(fix|repair|replace|install|build)\b/.test(normalized)) return 'repair'
+  return 'general'
+}
+
 function fallbackSuggestion(title = 'Task') {
-  return {
-    doneWhen: `${title} is fully done`,
-    why: "So it's ready when you need it",
+  const taskTitle = normalizeTaskTitle(title)
+  const intent = classifyTaskIntent(taskTitle)
+
+  if (intent === 'communication') {
+    return {
+      doneWhen: `The message about ${taskTitle} has been sent and any next step is clear`,
+      why: "So nobody is left waiting or guessing",
+    }
   }
+
+  if (intent === 'planning') {
+    return {
+      doneWhen: `${taskTitle} has a clear date, time, or next step`,
+      why: "So the plan does not stay vague",
+    }
+  }
+
+  if (intent === 'money') {
+    return {
+      doneWhen: `${taskTitle} is paid, reviewed, or ready for the next step`,
+      why: "So money does not become a surprise later",
+    }
+  }
+
+  if (intent === 'home') {
+    return {
+      doneWhen: `${taskTitle} is done enough that the space feels reset`,
+      why: "So it stops adding background stress",
+    }
+  }
+
+  if (intent === 'errand') {
+    return {
+      doneWhen: `${taskTitle} is picked up, ordered, or no longer needed`,
+      why: "So it is not sitting on the mental list anymore",
+    }
+  }
+
+  if (intent === 'repair') {
+    return {
+      doneWhen: `${taskTitle} is working or the next repair step is clear`,
+      why: "So the problem does not keep lingering",
+    }
+  }
+
+  return {
+    doneWhen: `${taskTitle} has a clear finish point or next step`,
+    why: "So it does not stay half-open in your head",
+  }
+}
+
+function cleanSuggestionText(value = '') {
+  return String(value || '')
+    .replace(/^[-•\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function parseSuggestionContent(content, title) {
   try {
     const parsed = JSON.parse(content)
-    const doneWhen = typeof parsed.doneWhen === 'string' ? parsed.doneWhen.trim() : ''
-    const why = typeof parsed.why === 'string' ? parsed.why.trim() : ''
+    const doneWhen = cleanSuggestionText(parsed.doneWhen)
+    const why = cleanSuggestionText(parsed.why)
 
     if (!doneWhen || !why) return fallbackSuggestion(title)
     return { doneWhen, why }
@@ -168,6 +235,9 @@ export const suggestTask = onRequest({ region: 'us-central1', cors: true }, asyn
   const assignedTo = typeof request.body?.assignedTo === 'string' ? request.body.assignedTo.trim() : ''
   const requestedBy =
     typeof request.body?.requestedBy === 'string' ? request.body.requestedBy.trim() : request.body?.requestedBy ?? null
+  const category = typeof request.body?.category === 'string' ? request.body.category.trim() : ''
+  const effort = typeof request.body?.effort === 'string' ? request.body.effort.trim() : ''
+  const notes = typeof request.body?.notes === 'string' ? request.body.notes.trim().slice(0, 300) : ''
 
   if (!title) {
     response.status(400).json({ error: 'A task title is required.' })
@@ -183,42 +253,48 @@ export const suggestTask = onRequest({ region: 'us-central1', cors: true }, asyn
     const openai = new OpenAI({ apiKey })
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      temperature: 0.3,
-      max_tokens: 100,
+      temperature: 0.2,
+      max_tokens: 140,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content: `You generate short, real-world task suggestions.
+          content: `You improve task clarity for a mobile-first household follow-through app.
 
-DONE WHEN:
-- describe what it looks like when the task is actually done
-- include the object
-- no words like completed, handled, managed
-- if the task is a project like finish, build, launch, or complete, say the object is complete and ready to use
-- if the task starts with help, say the person has what they need and is ready
+The user may only give a short title. Infer a practical finish line, but do not invent private details.
 
-WHY:
-- explain real-world impact
-- 1 short sentence
-- no productivity or system language
-- for project tasks, say: So it's actually finished and not left in progress
-- for help tasks, say: So they're not stuck without it
+Write two fields:
+1. doneWhen: a concrete, observable finish line.
+2. why: the real-life reason this matters.
 
-Never use:
-handled, managed, organized, follow-up, completed, efficient
+Rules:
+- Be specific to the task title.
+- Sound human, not like a productivity app.
+- Keep each field under 110 characters.
+- No guilt, shame, therapy language, or corporate wording.
+- Do not say completed, handled, managed, optimized, efficient, productivity, accountability, system, workflow, leverage, or follow-up.
+- Do not repeat the task title word-for-word unless needed for clarity.
+- If the task is vague, make the next visible step clear.
+- If it involves another person, focus on reducing waiting, confusion, or friction.
+- If it is a home task, focus on reducing background stress.
+- If it is planning, focus on date/time/decision clarity.
 
-Keep it simple and natural.`,
+Return strict JSON only:
+{
+  "doneWhen": string,
+  "why": string
+}`,
         },
         {
           role: 'user',
-          content: `Task: ${title}
-Assigned to: ${assignedTo || 'unknown'}
-Requested by: ${requestedBy || 'none'}
-
-Return JSON with:
-doneWhen
-why`,
+          content: JSON.stringify({
+            title,
+            assignedTo: assignedTo || 'unknown',
+            requestedBy: requestedBy || 'none',
+            category: category || 'unknown',
+            effort: effort || 'unknown',
+            notes: notes || '',
+          }),
         },
       ],
     })
@@ -259,22 +335,24 @@ export const suggestAccountability = onRequest({ region: 'us-central1', cors: tr
     const openai = new OpenAI({ apiKey })
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      temperature: 0.3,
-      max_tokens: 50,
+      temperature: 0.25,
+      max_tokens: 60,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content: `You are writing a short, real-world observation.
+          content: `You write one short relationship-aware app insight.
 
-Be direct, neutral, and grounded.
+Be calm, practical, and human.
 
-Do not:
-- guilt
-- exaggerate
-- use system language
+Rules:
+- Under 12 words.
+- No guilt or shame.
+- No system language.
+- No therapy language.
+- No exaggeration.
+- Make it sound like a helpful nudge, not an alert.
 
-Keep under 12 words.
 Return JSON with:
 message`,
         },
@@ -325,8 +403,8 @@ export const suggestCheckInTasks = onRequest({ region: 'us-central1', cors: true
     const openai = new OpenAI({ apiKey })
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      temperature: 0.3,
-      max_tokens: 220,
+      temperature: 0.25,
+      max_tokens: 260,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -336,10 +414,14 @@ export const suggestCheckInTasks = onRequest({ region: 'us-central1', cors: true
 Rules:
 - Return 1 to 3 tasks max.
 - Make each task a small next action, not a summary.
+- Prefer the smallest useful action.
 - Keep titles short and real-world.
 - Use neutral language.
 - Do not use guilt, blame, productivity language, or system language.
 - Prefer tasks that resolve overdue, partner-requested, or discussion items.
+- Do not create big vague tasks like "Improve communication".
+- Each doneWhen must make the finish line obvious.
+- Each why must explain the real-world impact.
 
 Return JSON:
 {
