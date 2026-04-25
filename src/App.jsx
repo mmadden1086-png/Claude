@@ -33,6 +33,7 @@ import { useAuthSession } from './hooks/use-auth'
 import { useNotifications } from './hooks/use-notifications'
 import { useSharedData } from './hooks/use-shared-data'
 import { appendHistory, computeStats, createTaskPayload, deriveSections, getBannerMessage, getPointsForTask, sortTasks } from './lib/task-utils'
+import { getAccountabilitySignals, getDailyAccountabilityMessage } from './lib/accountability'
 import { detectDuplicateTask, getSmartRetryDate } from './lib/task-decision'
 import { selectTaskViews } from './lib/selection'
 import { advanceRepeatingTask, shouldAdvanceRepeat } from './lib/task-state'
@@ -248,6 +249,7 @@ function App() {
   const [dateMorningPrompt, setDateMorningPrompt] = useState(null)
   const [checkInConversationPrompt, setCheckInConversationPrompt] = useState(false)
   const [checkInDatePrompt, setCheckInDatePrompt] = useState(false)
+  const [accountabilityBanner, setAccountabilityBanner] = useState('')
   const [selectedDateDueDate, setSelectedDateDueDate] = useState(() => toDateInputValue())
   const [taskMotion, setTaskMotion] = useState({})
   const actionLocks = useRef(new Set())
@@ -319,6 +321,32 @@ function App() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(SNOOZE_PRESET_STORAGE_KEY, snoozePreset)
   }, [snoozePreset])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function updateAccountabilityBanner() {
+      const signal = getAccountabilitySignals({
+        currentUser,
+        tasks,
+        monthlyDateStatus,
+      })
+
+      if (!signal) {
+        setAccountabilityBanner('')
+        return
+      }
+
+      const message = await getDailyAccountabilityMessage(signal)
+      if (!cancelled) setAccountabilityBanner(message)
+    }
+
+    void updateAccountabilityBanner()
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser, monthlyDateStatus, tasks])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1239,6 +1267,7 @@ function App() {
     topDateIdeas,
     dateNightSummary,
     monthlyDateStatus,
+    accountabilityBanner,
     selection,
     sections,
     currentUser,

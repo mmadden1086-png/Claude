@@ -41,6 +41,26 @@ function parseSuggestionContent(content, title) {
   }
 }
 
+function fallbackAccountabilityMessage(condition = {}) {
+  if (condition.type === 'check_in_ignored') return "You haven't talked through things in over a week"
+  if (condition.type === 'check_in_missed') return "You haven't talked through things this week"
+  if (condition.type === 'date_night_missed') return "You didn't make time together this month"
+  if (condition.type === 'partner_tasks_escalated') return 'A few things she added have not been touched yet'
+  if (condition.type === 'partner_tasks_flagged') return 'A few partner asks need a first step'
+  return 'Something needs a little attention today'
+}
+
+function parseAccountabilityContent(content, condition) {
+  try {
+    const parsed = JSON.parse(content)
+    const message = typeof parsed.message === 'string' ? parsed.message.trim() : ''
+    return message || fallbackAccountabilityMessage(condition)
+  } catch (error) {
+    console.error('Could not parse OpenAI accountability JSON.', error)
+    return fallbackAccountabilityMessage(condition)
+  }
+}
+
 async function sendToUser(userId, title, body, data = {}) {
   if (!userId) return
   const userSnapshot = await db.collection('users').doc(userId).get()
@@ -162,6 +182,70 @@ why`,
   } catch (error) {
     console.error('OpenAI task suggestion failed.', error)
     response.status(200).json(fallbackSuggestion(title))
+  }
+})
+
+export const suggestAccountability = onRequest({ region: 'us-central1', cors: true }, async (request, response) => {
+  if (request.method === 'OPTIONS') {
+    response.status(204).send('')
+    return
+  }
+
+  if (request.method !== 'POST') {
+    response.set('Allow', 'POST')
+    response.status(405).json({ error: 'Method not allowed' })
+    return
+  }
+
+  const condition = {
+    type: typeof request.body?.type === 'string' ? request.body.type : '',
+    label: typeof request.body?.label === 'string' ? request.body.label : '',
+    days: Number(request.body?.days ?? 0),
+    count: Number(request.body?.count ?? 0),
+  }
+
+  try {
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY is not configured.')
+    }
+
+    const openai = new OpenAI({ apiKey })
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      max_tokens: 50,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You are writing a short, real-world observation.
+
+Be direct, neutral, and grounded.
+
+Do not:
+- guilt
+- exaggerate
+- use system language
+
+Keep under 12 words.
+Return JSON with:
+message`,
+        },
+        {
+          role: 'user',
+          content: `Condition: ${condition.label || condition.type}
+Days: ${condition.days}
+Count: ${condition.count}`,
+        },
+      ],
+    })
+
+    const content = completion.choices[0]?.message?.content ?? ''
+    response.status(200).json({ message: parseAccountabilityContent(content, condition) })
+  } catch (error) {
+    console.error('OpenAI accountability message failed.', error)
+    response.status(200).json({ message: fallbackAccountabilityMessage(condition) })
   }
 })
 

@@ -8,6 +8,7 @@ export function FocusPage({
   filteredTasks,
   focusGoalMessage,
   monthlyDateStatus,
+  accountabilityBanner,
   onOpenDateNight,
   onTaskAction,
   onOpenTask,
@@ -74,6 +75,11 @@ export function FocusPage({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="space-y-2">
+          {accountabilityBanner ? (
+            <div className="rounded-3xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              {accountabilityBanner}
+            </div>
+          ) : null}
           {guidance ? (
             guidance.onClick ? (
               <button className="inline-flex px-1 text-sm font-medium text-slate-500 underline-offset-4 transition hover:text-accent hover:underline" type="button" onClick={guidance.onClick}>
