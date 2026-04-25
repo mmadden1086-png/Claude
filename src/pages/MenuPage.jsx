@@ -57,10 +57,10 @@ export function MenuPage({
 
       <SectionCard title="Evening Wrap-Up" subtitle="Close the day without clutter.">
         <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700" type="button" onClick={onClearToday}>
-          Clear today
+          Push today's tasks to tomorrow
         </button>
         <button className="w-full rounded-3xl bg-ink px-4 py-4 text-left text-sm font-semibold text-white" type="button" onClick={onWrapUpTomorrow}>
-          Move all Today tasks to tomorrow
+          Wrap up — move everything and close out
         </button>
       </SectionCard>
 

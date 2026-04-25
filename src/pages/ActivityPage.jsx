@@ -85,13 +85,11 @@ export function ActivityPage({
 }) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
-  const [checkInOpen, setCheckInOpen] = useState(false)
   const [checkInSuggestions, setCheckInSuggestions] = useState([])
   const [checkInSuggestionsBusy, setCheckInSuggestionsBusy] = useState(false)
   const [addedSuggestionTitles, setAddedSuggestionTitles] = useState([])
 
-  // Check-in prep is active on the dedicated tab or when manually opened in Overview
-  const checkInActive = activeTab === 'checkin' || checkInOpen
+  const checkInActive = activeTab === 'checkin'
 
   const unreadPartnerTasks = filteredTasks.filter((task) => task.requestedBy === partner.id && !task.acknowledgedAt)
   const draggingTasks = sections?.draggingTasks ?? []

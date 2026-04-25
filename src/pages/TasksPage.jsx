@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarClock, Filter, Search, X } from 'lucide-react'
+import { CalendarClock, Filter, Search } from 'lucide-react'
 import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { QuickAddCard } from '../components/QuickAddCard'
@@ -251,7 +251,7 @@ export function TasksPage({
                   setUtilitiesDismissed(false)
                 }}
               >
-                <span>{utilitiesVisible ? 'Hide quick actions' : utilitiesSummaryLabel}</span>
+                <span>{utilitiesVisible ? 'Hide quick actions' : 'Quick actions'}</span>
                 <span className="text-xs text-slate-500">{utilitiesSummaryLabel}</span>
               </button>
 
