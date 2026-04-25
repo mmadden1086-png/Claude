@@ -1,3 +1,4 @@
+/* global process */
 import admin from 'firebase-admin'
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https'

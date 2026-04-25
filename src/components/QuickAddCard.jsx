@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TimeSelect } from './TimeSelect'
 import {
   BOTH_ASSIGNEE_ID,
@@ -10,6 +10,7 @@ import {
   getCanonicalUserName,
 } from '../lib/constants'
 import { generateRelationalWhy, saveWhyPattern } from '../lib/relationalWhyEngine'
+import { fetchAiTaskSuggestion } from '../lib/aiTaskSuggestions'
 import { generateDoneSuggestion, saveDonePattern } from '../lib/suggestionEngine'
 import { inferCategory, inferEffort, inferRepeatType } from '../lib/task-utils'
 import { getWhyDisplayDecision } from '../lib/why-strength'
@@ -27,19 +28,6 @@ const initialState = {
   whyThisMatters: '',
   repeatType: 'none',
   repeatDays: [],
-}
-
-const SUGGESTION_STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'my', 'our', 'your', 'with', 'on', 'in'])
-
-function hasEnoughSuggestionContext(title = '') {
-  const tokens = title
-    .toLowerCase()
-    .split(/\s+/)
-    .map((token) => token.replace(/[^a-z0-9]/g, ''))
-    .filter(Boolean)
-    .filter((token) => !SUGGESTION_STOP_WORDS.has(token))
-
-  return tokens.length >= 2
 }
 
 function mostCommon(values = [], fallback) {
@@ -84,11 +72,15 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
   const [form, setForm] = useState(() => buildInitialState(currentUser.id, preferredDefaults))
   const [internalExpanded, setInternalExpanded] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSuggestionLoading, setIsSuggestionLoading] = useState(false)
+  const [doneIsSuggested, setDoneIsSuggested] = useState(false)
   const [whyTouched, setWhyTouched] = useState(false)
   const [whyIsSuggested, setWhyIsSuggested] = useState(false)
   const [doneSuggestion, setDoneSuggestion] = useState('')
   const [whySuggestion, setWhySuggestion] = useState('')
   const [whySeed, setWhySeed] = useState(0)
+  const suggestedDoneRef = useRef('')
+  const suggestedWhyRef = useRef('')
   const assigneeOptions = [
     ...users.map((user) => ({
       ...user,
@@ -117,13 +109,23 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
   }
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      if (!form.title.trim() || !hasEnoughSuggestionContext(form.title)) {
+    const abortController = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      const title = form.title.trim()
+
+      if (title.length < 3) {
         setDoneSuggestion('')
         setWhySuggestion('')
+        setIsSuggestionLoading(false)
+        if (doneIsSuggested) {
+          setForm((current) => (current.clarity.trim() ? { ...current, clarity: '' } : current))
+          setDoneIsSuggested(false)
+          suggestedDoneRef.current = ''
+        }
         if (!whyTouched) {
           setForm((current) => (current.whyThisMatters.trim() && !whyIsSuggested ? current : { ...current, whyThisMatters: '' }))
           setWhyIsSuggested(false)
+          suggestedWhyRef.current = ''
         }
         return
       }
@@ -142,36 +144,79 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
         usersById,
         whySeed,
       )
-      const whyDecision = getWhyDisplayDecision(
-        {
-          ...form,
-          requestedBy: currentUser.id,
-          status: 'not_started',
-          snoozeCount: 0,
-        },
-        nextWhySuggestion,
-        currentUser.id,
-        tasks,
-      )
-      const visibleWhySuggestion = whyDecision.text || nextWhySuggestion
 
-      setDoneSuggestion(nextDoneSuggestion)
-      setWhySuggestion(visibleWhySuggestion)
+      function applySuggestions(nextDoneSuggestion, nextWhySuggestion) {
+        const whyDecision = getWhyDisplayDecision(
+          {
+            ...form,
+            requestedBy: currentUser.id,
+            status: 'not_started',
+            snoozeCount: 0,
+          },
+          nextWhySuggestion,
+          currentUser.id,
+          tasks,
+        )
+        const visibleWhySuggestion = whyDecision.text || nextWhySuggestion
 
-      if (!whyTouched && visibleWhySuggestion) {
-        setForm((current) => {
-          if (current.whyThisMatters.trim() && !whyIsSuggested) return current
-          return { ...current, whyThisMatters: visibleWhySuggestion }
-        })
-        setWhyIsSuggested(true)
-      } else if (!whyTouched && !visibleWhySuggestion) {
-        setForm((current) => (current.whyThisMatters.trim() ? { ...current, whyThisMatters: '' } : current))
-        setWhyIsSuggested(false)
+        setDoneSuggestion(nextDoneSuggestion)
+        setWhySuggestion(visibleWhySuggestion)
+
+        if (nextDoneSuggestion) {
+          setForm((current) => {
+            if (current.clarity.trim() && current.clarity !== suggestedDoneRef.current) return current
+            if (current.clarity === nextDoneSuggestion) return current
+            return { ...current, clarity: nextDoneSuggestion }
+          })
+          suggestedDoneRef.current = nextDoneSuggestion
+          setDoneIsSuggested(true)
+        }
+
+        if (!whyTouched && visibleWhySuggestion) {
+          setForm((current) => {
+            if (current.whyThisMatters.trim() && current.whyThisMatters !== suggestedWhyRef.current) return current
+            if (current.whyThisMatters === visibleWhySuggestion) return current
+            return { ...current, whyThisMatters: visibleWhySuggestion }
+          })
+          suggestedWhyRef.current = visibleWhySuggestion
+          setWhyIsSuggested(true)
+        } else if (!whyTouched && !visibleWhySuggestion) {
+          setForm((current) => (current.whyThisMatters.trim() ? { ...current, whyThisMatters: '' } : current))
+          setWhyIsSuggested(false)
+          suggestedWhyRef.current = ''
+        }
       }
-    }, 250)
 
-    return () => window.clearTimeout(timeoutId)
-  }, [currentUser, form, tasks, usersById, whyIsSuggested, whySeed, whyTouched])
+      applySuggestions(nextDoneSuggestion, nextWhySuggestion)
+
+      setIsSuggestionLoading(true)
+
+      try {
+        const aiSuggestion = await fetchAiTaskSuggestion(
+          {
+            title,
+            assignedTo: form.assignedTo,
+            requestedBy: currentUser.id,
+          },
+          abortController.signal,
+        )
+
+        if (!aiSuggestion) return
+        applySuggestions(aiSuggestion.doneWhen || nextDoneSuggestion, aiSuggestion.why || nextWhySuggestion)
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.warn('AI task suggestion failed; keeping local suggestion.', error)
+        }
+      } finally {
+        if (!abortController.signal.aborted) setIsSuggestionLoading(false)
+      }
+    }, 600)
+
+    return () => {
+      abortController.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [currentUser, doneIsSuggested, form, tasks, usersById, whyIsSuggested, whySeed, whyTouched])
 
   function toggleDay(day) {
     setForm((current) => ({
@@ -197,6 +242,10 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
       setExpanded(false)
       setWhyTouched(false)
       setWhyIsSuggested(false)
+      setDoneIsSuggested(false)
+      setIsSuggestionLoading(false)
+      suggestedDoneRef.current = ''
+      suggestedWhyRef.current = ''
       setWhySeed(0)
       setDoneSuggestion('')
       setWhySuggestion('')
@@ -239,6 +288,9 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
             {form.repeatType !== 'none' ? (
               <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">Suggested repeat: {form.repeatType}</span>
             ) : null}
+              {isSuggestionLoading ? (
+                <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-500">Generating suggestions...</span>
+              ) : null}
             </div>
             {!expanded && doneSuggestion ? (
               <button
@@ -247,6 +299,8 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
                 disabled={isSubmitting}
                 onClick={() => {
                   setExpanded(true)
+                  setDoneIsSuggested(true)
+                  suggestedDoneRef.current = doneSuggestion
                   updateField('clarity', doneSuggestion)
                 }}
               >
@@ -382,7 +436,11 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
                   setDoneSuggestion(generateDoneSuggestion(form))
                 }
               }}
-              onChange={(event) => updateField('clarity', event.target.value)}
+              onChange={(event) => {
+                setDoneIsSuggested(false)
+                suggestedDoneRef.current = ''
+                updateField('clarity', event.target.value)
+              }}
             />
             {!form.clarity.trim() && doneSuggestion ? (
               <div className="flex flex-wrap gap-2">
@@ -390,7 +448,11 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
                   className="rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent"
                   type="button"
                   disabled={isSubmitting}
-                  onClick={() => updateField('clarity', doneSuggestion)}
+                  onClick={() => {
+                    setDoneIsSuggested(true)
+                    suggestedDoneRef.current = doneSuggestion
+                    updateField('clarity', doneSuggestion)
+                  }}
                 >
                   Apply suggestion: {doneSuggestion}
                 </button>
@@ -405,6 +467,7 @@ export function QuickAddCard({ currentUser, users, tasks = [], onSubmit, expande
               onChange={(event) => {
                 setWhyTouched(true)
                 setWhyIsSuggested(false)
+                suggestedWhyRef.current = ''
                 updateField('whyThisMatters', event.target.value)
               }}
             />

@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
 import { TimeSelect } from './TimeSelect'
 import {
@@ -14,22 +14,10 @@ import {
 } from '../lib/constants'
 import { describeRepeat, formatDueContext, formatStatusLabel, formatTaskAge, getTaskStatus, normalizeTimeValue, toDate } from '../lib/format'
 import { generateRelationalWhy, saveWhyPattern } from '../lib/relationalWhyEngine'
+import { fetchAiTaskSuggestion } from '../lib/aiTaskSuggestions'
 import { generateDoneSuggestion, saveDonePattern } from '../lib/suggestionEngine'
 import { buildRepeatPreview } from '../lib/task-utils'
 import { getWhyDisplayDecision } from '../lib/why-strength'
-
-const SUGGESTION_STOP_WORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'my', 'our', 'your', 'with', 'on', 'in'])
-
-function hasEnoughSuggestionContext(title = '') {
-  const tokens = title
-    .toLowerCase()
-    .split(/\s+/)
-    .map((token) => token.replace(/[^a-z0-9]/g, ''))
-    .filter(Boolean)
-    .filter((token) => !SUGGESTION_STOP_WORDS.has(token))
-
-  return tokens.length >= 2
-}
 
 function toDateInput(value) {
   const date = toDate(value)
@@ -62,11 +50,15 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
   const [isEditing, setIsEditing] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [isSuggestionLoading, setIsSuggestionLoading] = useState(false)
+  const [doneIsSuggested, setDoneIsSuggested] = useState(false)
   const [whyTouched, setWhyTouched] = useState(Boolean(task.whyThisMatters?.trim()))
   const [whyIsSuggested, setWhyIsSuggested] = useState(false)
   const [doneSuggestion, setDoneSuggestion] = useState('')
   const [whySuggestion, setWhySuggestion] = useState('')
   const [whySeed, setWhySeed] = useState(0)
+  const suggestedDoneRef = useRef('')
+  const suggestedWhyRef = useRef('')
   const assigneeOptions = [
     ...users.map((user) => ({
       ...user,
@@ -90,10 +82,19 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
   }
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      if (!form.title.trim() || !hasEnoughSuggestionContext(form.title)) {
+    const abortController = new AbortController()
+    const timeoutId = window.setTimeout(async () => {
+      const title = form.title.trim()
+
+      if (title.length < 3) {
         setDoneSuggestion('')
         setWhySuggestion('')
+        setIsSuggestionLoading(false)
+        if (doneIsSuggested) {
+          setForm((current) => (current.clarity.trim() ? { ...current, clarity: '' } : current))
+          setDoneIsSuggested(false)
+          suggestedDoneRef.current = ''
+        }
         return
       }
 
@@ -110,38 +111,82 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
         usersById,
         whySeed,
       )
-      const whyDecision = getWhyDisplayDecision(
-        {
-          ...task,
-          ...form,
-          requestedBy: task.requestedBy ?? currentUser?.id,
-          status: task.status ?? 'not_started',
-          snoozeCount: task.snoozeCount ?? 0,
-        },
-        nextWhySuggestion,
-        currentUser?.id,
-        tasks,
-      )
-      const visibleWhySuggestion = whyDecision.text || nextWhySuggestion
 
-      setDoneSuggestion(nextDoneSuggestion)
-      setWhySuggestion(visibleWhySuggestion)
+      function applySuggestions(nextDoneSuggestion, nextWhySuggestion) {
+        const whyDecision = getWhyDisplayDecision(
+          {
+            ...task,
+            ...form,
+            requestedBy: task.requestedBy ?? currentUser?.id,
+            status: task.status ?? 'not_started',
+            snoozeCount: task.snoozeCount ?? 0,
+          },
+          nextWhySuggestion,
+          currentUser?.id,
+          tasks,
+        )
+        const visibleWhySuggestion = whyDecision.text || nextWhySuggestion
 
-      if (!whyTouched && visibleWhySuggestion) {
-        setForm((current) => {
-          if (current.whyThisMatters.trim() && !whyIsSuggested) return current
-          return { ...current, whyThisMatters: visibleWhySuggestion }
-        })
-        setWhyIsSuggested(true)
-      } else if (!whyTouched && !visibleWhySuggestion) {
-        setForm((current) => (current.whyThisMatters.trim() ? { ...current, whyThisMatters: '' } : current))
-        setWhyIsSuggested(false)
+        setDoneSuggestion(nextDoneSuggestion)
+        setWhySuggestion(visibleWhySuggestion)
+
+        if (nextDoneSuggestion) {
+          setForm((current) => {
+            if (current.clarity.trim() && current.clarity !== suggestedDoneRef.current) return current
+            if (current.clarity === nextDoneSuggestion) return current
+            return { ...current, clarity: nextDoneSuggestion }
+          })
+          suggestedDoneRef.current = nextDoneSuggestion
+          setDoneIsSuggested(true)
+        }
+
+        if (!whyTouched && visibleWhySuggestion) {
+          setForm((current) => {
+            if (current.whyThisMatters.trim() && current.whyThisMatters !== suggestedWhyRef.current) return current
+            if (current.whyThisMatters === visibleWhySuggestion) return current
+            return { ...current, whyThisMatters: visibleWhySuggestion }
+          })
+          suggestedWhyRef.current = visibleWhySuggestion
+          setWhyIsSuggested(true)
+        } else if (!whyTouched && !visibleWhySuggestion) {
+          setForm((current) => (current.whyThisMatters.trim() ? { ...current, whyThisMatters: '' } : current))
+          setWhyIsSuggested(false)
+          suggestedWhyRef.current = ''
+        }
       }
-    }, 250)
 
-    return () => window.clearTimeout(timeoutId)
+      applySuggestions(nextDoneSuggestion, nextWhySuggestion)
+
+      setIsSuggestionLoading(true)
+
+      try {
+        const aiSuggestion = await fetchAiTaskSuggestion(
+          {
+            title,
+            assignedTo: form.assignedTo,
+            requestedBy: task.requestedBy ?? currentUser?.id ?? null,
+          },
+          abortController.signal,
+        )
+
+        if (!aiSuggestion) return
+        applySuggestions(aiSuggestion.doneWhen || nextDoneSuggestion, aiSuggestion.why || nextWhySuggestion)
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.warn('AI task suggestion failed; keeping local suggestion.', error)
+        }
+      } finally {
+        if (!abortController.signal.aborted) setIsSuggestionLoading(false)
+      }
+    }, 600)
+
+    return () => {
+      abortController.abort()
+      window.clearTimeout(timeoutId)
+    }
   }, [
     currentUser,
+    doneIsSuggested,
     form,
     task,
     task.requestedBy,
@@ -525,7 +570,11 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
                 setDoneSuggestion(generateDoneSuggestion({ ...task, ...form }))
               }
             }}
-            onChange={(event) => updateField('clarity', event.target.value)}
+            onChange={(event) => {
+              setDoneIsSuggested(false)
+              suggestedDoneRef.current = ''
+              updateField('clarity', event.target.value)
+            }}
             placeholder={doneSuggestion || 'What does done look like?'}
           />
           {!form.clarity.trim() && doneSuggestion ? (
@@ -533,7 +582,11 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
               <button
                 className="rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent"
                 type="button"
-                onClick={() => updateField('clarity', doneSuggestion)}
+                onClick={() => {
+                  setDoneIsSuggested(true)
+                  suggestedDoneRef.current = doneSuggestion
+                  updateField('clarity', doneSuggestion)
+                }}
               >
                 Apply suggestion: {doneSuggestion}
               </button>
@@ -546,11 +599,15 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
             onChange={(event) => {
               setWhyTouched(true)
               setWhyIsSuggested(false)
+              suggestedWhyRef.current = ''
               updateField('whyThisMatters', event.target.value)
             }}
             placeholder={whySuggestion || 'Why this matters'}
           />
           <div className="flex flex-wrap items-center gap-2">
+            {isSuggestionLoading ? (
+              <p className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500">Generating suggestions...</p>
+            ) : null}
             {whyIsSuggested && form.whyThisMatters.trim() ? (
               <p className="text-xs text-slate-500">Suggested</p>
             ) : null}

@@ -15,6 +15,13 @@
     ],
     "rewrites": [
       {
+        "source": "/suggestTask",
+        "function": {
+          "functionId": "suggestTask",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
