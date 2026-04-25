@@ -577,21 +577,93 @@ export const sendNotification = onCall({ region: 'us-central1' }, async (request
   }
 })
 
-// Check-in and date-night reminders — runs daily at 9 AM Pacific.
-// Anti-spam: at most one notification per kind per user per 23 hours (tracked in
-// users/{id}.notificationLog as Firestore Timestamps).
-export const dailyCheck = onSchedule(
-  {
-    schedule: '0 9 * * *',
-    timeZone: 'America/Los_Angeles',
-  },
+// ── Smart notification helpers ────────────────────────────────────────────────
+
+const NOTIF_COOLDOWN_MS = {
+  checkin: 24 * 60 * 60 * 1000,
+  'date-night': 48 * 60 * 60 * 1000,
+  'partner-tasks': 24 * 60 * 60 * 1000,
+}
+
+const NOTIF_FIELD = {
+  checkin: 'checkinLastSentAt',
+  'date-night': 'dateNightLastSentAt',
+  'partner-tasks': 'partnerTasksLastSentAt',
+}
+
+function isWithinSendWindow(now) {
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      hour12: false,
+      timeZone: 'America/Los_Angeles',
+    }).format(now),
+    10,
+  )
+  return hour >= 8 && hour < 20
+}
+
+function cooledDown(kind, notifications, now) {
+  const field = NOTIF_FIELD[kind]
+  const lastSent = notifications?.[field]?.toDate?.()
+  if (!lastSent) return true
+  return now - lastSent > NOTIF_COOLDOWN_MS[kind]
+}
+
+function checkInSignal(daysSince) {
+  if (daysSince >= 9)
+    return { kind: 'checkin', level: 3, body: "It's been over a week since your last check-in — things pile up fast." }
+  if (daysSince >= 7)
+    return { kind: 'checkin', level: 2, body: "You're over a week out from your last check-in. Worth catching up soon." }
+  if (daysSince >= 6) return { kind: 'checkin', level: 1, body: 'Coming up on a week since your last check-in.' }
+  return null
+}
+
+function dateNightSignal(now, dateCompletedThisMonth) {
+  if (dateCompletedThisMonth) return null
+  const dayOfMonth = now.getDate()
+  if (dayOfMonth >= 20)
+    return { kind: 'date-night', level: 2, body: "Still no date night this month and the month's almost over." }
+  if (dayOfMonth >= 10)
+    return { kind: 'date-night', level: 1, body: "Halfway through the month and no date night yet." }
+  return null
+}
+
+function partnerTaskSignal(maxStaleDays) {
+  if (maxStaleDays >= 5)
+    return { kind: 'partner-tasks', level: 2, body: 'Some things she added have been waiting on you for a while.' }
+  if (maxStaleDays >= 3)
+    return { kind: 'partner-tasks', level: 1, body: "A couple things she added haven't been touched yet." }
+  return null
+}
+
+function buildMessage(signals) {
+  if (!signals.length) return null
+  if (signals.length === 1) return signals[0].body
+  const parts = []
+  for (const s of signals) {
+    if (s.kind === 'checkin') parts.push('check-in is overdue')
+    else if (s.kind === 'date-night') parts.push('no date night this month')
+    else if (s.kind === 'partner-tasks') parts.push("partner's tasks waiting")
+  }
+  return `A few things need attention: ${parts.join(', ')}.`
+}
+
+function getReadySignals(rawSignals, notifications, now) {
+  return rawSignals.filter((s) => s && cooledDown(s.kind, notifications, now))
+}
+
+// Batched smart reminders — runs daily at 9 AM Pacific.
+// Collects check-in, date-night, and partner-task signals; throttles per type;
+// batches into one notification per user; dedupes against the last message sent.
+export const smartDailyCheck = onSchedule(
+  { schedule: '0 9 * * *', timeZone: 'America/Los_Angeles' },
   async () => {
     const now = new Date()
-    const oneDayMs = 24 * 60 * 60 * 1000
-    const cooldownMs = 23 * 60 * 60 * 1000
+    if (!isWithinSendWindow(now)) return
 
-    // Determine whether any date was completed this calendar month.
-    // dateHistory entries store dateCompleted as a Timestamp or ISO string.
+    const oneDayMs = 24 * 60 * 60 * 1000
+
     const dateHistorySnapshot = await db.collection('dateHistory').get()
     const dateCompletedThisMonth = dateHistorySnapshot.docs.some((histDoc) => {
       const data = histDoc.data()
@@ -608,115 +680,60 @@ export const dailyCheck = onSchedule(
         const user = userDoc.data()
         if (!user?.pushToken) return
 
-        const notificationLog = user.notificationLog ?? {}
-        const updates = {}
+        const notifications = user.notifications ?? {}
 
-        // ── Check-in reminder ──────────────────────────────────────────────
+        // ── Collect signals ──────────────────────────────────────────────
         const lastCheckIn =
           user.checkIn?.lastCompletedAt?.toDate?.() ??
           (user.lastCheckInAt ? new Date(user.lastCheckInAt) : null)
+        const daysSinceCheckIn =
+          lastCheckIn && !Number.isNaN(lastCheckIn.getTime())
+            ? Math.floor((now - lastCheckIn) / oneDayMs)
+            : null
 
-        if (lastCheckIn && !Number.isNaN(lastCheckIn.getTime())) {
-          const daysSince = Math.floor((now - lastCheckIn) / oneDayMs)
-          const lastNotif = notificationLog.checkin?.toDate?.()
-          const cooledDown = !lastNotif || now - lastNotif > cooldownMs
-
-          if (cooledDown) {
-            if (daysSince >= 7) {
-              await sendToUser(
-                userDoc.id,
-                'Follow Through',
-                "It's been over a week since your last check-in",
-                { kind: 'checkin-7day' },
-              )
-              updates['notificationLog.checkin'] = admin.firestore.FieldValue.serverTimestamp()
-            } else if (daysSince >= 6) {
-              await sendToUser(
-                userDoc.id,
-                'Follow Through',
-                "You're coming up on a week since your last check-in",
-                { kind: 'checkin-6day' },
-              )
-              updates['notificationLog.checkin'] = admin.firestore.FieldValue.serverTimestamp()
-            }
-          }
-        }
-
-        // ── Date night monthly reminder ────────────────────────────────────
-        if (!dateCompletedThisMonth) {
-          const lastNotif = notificationLog['date-night']?.toDate?.()
-          const cooledDown = !lastNotif || now - lastNotif > cooldownMs
-          if (cooledDown) {
-            await sendToUser(
-              userDoc.id,
-              'Follow Through',
-              "You haven't planned a date night this month",
-              { kind: 'date-night' },
-            )
-            updates['notificationLog.date-night'] = admin.firestore.FieldValue.serverTimestamp()
-          }
-        }
-
-        if (Object.keys(updates).length) {
-          await db.collection('users').doc(userDoc.id).update(updates)
-        }
-      }),
-    )
-  },
-)
-
-// Partner-task nudge — runs daily at 6 PM Pacific.
-// Notifies a user when tasks the partner requested have sat untouched for 3+ days.
-// Anti-spam: at most one nudge per user per 23 hours.
-export const partnerTaskCheck = onSchedule(
-  {
-    schedule: '0 18 * * *',
-    timeZone: 'America/Los_Angeles',
-  },
-  async () => {
-    const now = new Date()
-    const cutoff = new Date(now - 3 * 24 * 60 * 60 * 1000)
-    const cooldownMs = 23 * 60 * 60 * 1000
-
-    const usersSnapshot = await db.collection('users').get()
-    await Promise.all(
-      usersSnapshot.docs.map(async (userDoc) => {
-        const user = userDoc.data()
-        if (!user?.pushToken) return
-
-        // Tasks assigned to this user, not completed, requested by someone else
         const tasksSnapshot = await db
           .collection('tasks')
           .where('assignedTo', '==', userDoc.id)
           .where('isCompleted', '==', false)
           .get()
-
-        const staleTasks = tasksSnapshot.docs
-          .map((taskDoc) => ({ id: taskDoc.id, ...taskDoc.data() }))
+        const staleDays = tasksSnapshot.docs
+          .map((taskDoc) => taskDoc.data())
           .filter((task) => {
             if (!task.requestedBy || task.requestedBy === userDoc.id) return false
             const createdAt =
-              task.createdAt?.toDate?.() ??
-              (task.createdAt ? new Date(task.createdAt) : null)
-            return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt < cutoff
+              task.createdAt?.toDate?.() ?? (task.createdAt ? new Date(task.createdAt) : null)
+            return createdAt && !Number.isNaN(createdAt.getTime())
           })
+          .map((task) => {
+            const createdAt = task.createdAt?.toDate?.() ?? new Date(task.createdAt)
+            return Math.floor((now - createdAt) / oneDayMs)
+          })
+        const maxStaleDays = staleDays.length ? Math.max(...staleDays) : 0
 
-        if (!staleTasks.length) return
+        const rawSignals = [
+          daysSinceCheckIn !== null ? checkInSignal(daysSinceCheckIn) : null,
+          dateNightSignal(now, dateCompletedThisMonth),
+          maxStaleDays > 0 ? partnerTaskSignal(maxStaleDays) : null,
+        ]
 
-        const notificationLog = user.notificationLog ?? {}
-        const lastNotif = notificationLog['partner-tasks']?.toDate?.()
-        if (lastNotif && now - lastNotif < cooldownMs) return
+        // ── Filter by throttle ───────────────────────────────────────────
+        const readySignals = getReadySignals(rawSignals.filter(Boolean), notifications, now)
+        if (!readySignals.length) return
 
-        await sendToUser(
-          userDoc.id,
-          'Follow Through',
-          "A couple things she added haven't been touched yet",
-          { kind: 'partner-tasks', count: String(staleTasks.length) },
-        )
+        // ── Build and dedupe ─────────────────────────────────────────────
+        const message = buildMessage(readySignals)
+        if (!message) return
+        if (notifications.lastMessage === message) return
 
-        await db.collection('users').doc(userDoc.id).update({
-          'notificationLog.partner-tasks': admin.firestore.FieldValue.serverTimestamp(),
-        })
+        // ── Send ─────────────────────────────────────────────────────────
+        await sendToUser(userDoc.id, 'Follow Through', message, { kind: 'smart-daily' })
+
+        // ── Update throttle timestamps ───────────────────────────────────
+        const updates = { 'notifications.lastMessage': message }
+        for (const s of readySignals) {
+          updates[`notifications.${NOTIF_FIELD[s.kind]}`] = admin.firestore.FieldValue.serverTimestamp()
+        }
+        await db.collection('users').doc(userDoc.id).update(updates)
       }),
     )
   },
