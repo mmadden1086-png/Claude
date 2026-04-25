@@ -22,6 +22,7 @@ export function FocusPage({
   const topTask = sections?.topTask ?? null
   const focusTask = sections?.focusTask ?? topTask
   const primaryTaskId = focusTask?.parentTaskId ?? focusTask?.id
+  const whyLabel = focusTask?._surfaceReason ?? ''
   const guidance = !monthlyDateStatus?.hasPlannedDate && !monthlyDateStatus?.hasCompletedDate
     ? {
         text: monthlyDateStatus?.midMonthReminder ? "You haven't planned a date night this month" : 'Plan a date night this month',
@@ -134,6 +135,13 @@ export function FocusPage({
             ) : (
               <p className="px-1 text-sm font-medium text-slate-500">{guidance.text}</p>
             )
+          ) : null}
+          {whyLabel ? (
+            <div className="px-1">
+              <span className="inline-block rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-slate-500">
+                {whyLabel}
+              </span>
+            </div>
           ) : null}
           <div key={primaryTaskId} className="ft-focus-swap">
             <TaskCard

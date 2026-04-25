@@ -47,7 +47,17 @@ export function scoreTask(task, currentUserId) {
   return score
 }
 
-function enrichTask(task, currentUserId, now) {
+function filterBoost(task, currentUserId, filterId) {
+  if (!filterId || filterId === 'all') return 0
+  const isMe = isAssignedToCurrentUser(task, currentUserId)
+  // Re-rank, never hide: tasks that don't match the active filter get a score penalty
+  // so they sink to the bottom of each section rather than disappearing.
+  if (filterId === 'mine' && !isMe) return -50
+  if (filterId === 'partner' && isMe && task.assignedTo !== BOTH_ASSIGNEE_ID) return -50
+  return 0
+}
+
+function enrichTask(task, currentUserId, now, filterId = 'all') {
   const dueDate = toDate(task.dueDate)
   const createdAt = toDate(task.createdAt)
   const dueMs = dueDate?.getTime() ?? null
@@ -63,10 +73,11 @@ function enrichTask(task, currentUserId, now) {
     ageHours,
   }
   const _surfaceReason = getWhyThisIsShowingLabel(enrichedTask, currentUserId)
+  const boost = filterBoost(enrichedTask, currentUserId, filterId)
 
   return {
     ...enrichedTask,
-    _score: scoreTask(enrichedTask, currentUserId),
+    _score: scoreTask(enrichedTask, currentUserId) + boost,
     _surfaceReason,
   }
 }
@@ -89,6 +100,7 @@ function compareByScore(a, b) {
 export function selectTaskViews({
   tasks,
   currentUserId,
+  filterId = 'all',
   lowEnergyMode = false,
   now = Date.now(),
 }) {
@@ -113,15 +125,16 @@ export function selectTaskViews({
 
   const lowEnergyPool = lowEnergyMode ? openTasks.filter((task) => task.effort === 'Quick') : openTasks
   const scoringPool = lowEnergyPool.length ? lowEnergyPool : openTasks
-  const allSorted = scoringPool.map((task) => enrichTask(task, currentUserId, resolvedNow)).sort(compareByScore)
+  const allSorted = scoringPool.map((task) => enrichTask(task, currentUserId, resolvedNow, filterId)).sort(compareByScore)
 
   const enrichedById = Object.fromEntries(allSorted.map((task) => [task.id, task]))
   const whyLabels = Object.fromEntries(allSorted.map((task) => [task.id, task._surfaceReason || '']))
 
+  // Focus is always the highest-priority task assigned to me — filter doesn't affect this.
+  const myTasks = allSorted.filter((task) => isAssignedToCurrentUser(task, currentUserId))
   const focus =
+    myTasks[0] ??
     allSorted[0] ??
-    openTasks.find((task) => isAssignedToCurrentUser(task, currentUserId)) ??
-    openTasks[0] ??
     null
 
   const used = new Set()

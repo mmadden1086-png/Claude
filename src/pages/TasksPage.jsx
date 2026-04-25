@@ -179,7 +179,7 @@ export function TasksPage({
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const totalOpenCount = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const filterLabel = FILTERS.find((filter) => filter.id === filterId)?.label ?? 'current'
-  const noFilterMatches = !searchQuery && filterId !== 'all' && activeCount === 0 && totalOpenCount > 0
+  const noFilterMatches = !searchQuery && filterId !== 'all' && allSorted.length === 0 && totalOpenCount > 0
   const draggingCount = visibleDraggingTasks.length
   const shouldAutoExpandUtilities = draggingCount > 0 || filteredTasks.some((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED)
   const checkInPrepForcedOpen = Boolean(checkInPrepOpenToken) && dismissedCheckInPrepToken !== checkInPrepOpenToken

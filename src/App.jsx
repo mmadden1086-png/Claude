@@ -281,13 +281,14 @@ function App() {
   const selection = useMemo(
     () => (currentUser
       ? selectTaskViews({
-          tasks: filteredTasks.filter((task) => !task.isMissed),
+          tasks: deferredTasks.filter((task) => !task.isMissed),
           currentUserId: currentUser.id,
+          filterId,
           lowEnergyMode,
           now: Date.now(),
         })
       : null),
-    [currentUser, filteredTasks, lowEnergyMode],
+    [currentUser, deferredTasks, filterId, lowEnergyMode],
   )
   const sections = currentUser ? deriveSections(filteredTasks, currentUser.id, lowEnergyMode, goals, selection) : null
   const stats = useMemo(() => computeStats(tasks), [tasks])
