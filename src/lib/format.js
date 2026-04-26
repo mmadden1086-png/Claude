@@ -149,7 +149,7 @@ export function resolveSnoozeUntil(optionId, customDate) {
     while (!isSaturday(cursor)) cursor = addDays(cursor, 1)
     return set(cursor, { hours: 9, minutes: 0, seconds: 0, milliseconds: 0 })
   }
-  if (optionId === 'custom' && customDate) return set(new Date(customDate), { hours: 9, minutes: 0, seconds: 0, milliseconds: 0 })
+  if (optionId === 'custom' && customDate) return set(new Date(customDate + 'T12:00:00'), { hours: 9, minutes: 0, seconds: 0, milliseconds: 0 })
   return null
 }
 
@@ -162,7 +162,7 @@ export function resolveRescheduleDate(optionId, customDate) {
     return cursor
   }
   if (optionId === 'next-week') return addDays(now, 7)
-  if (optionId === 'custom' && customDate) return new Date(customDate)
+  if (optionId === 'custom' && customDate) return new Date(customDate + 'T12:00:00')
   return null
 }
 

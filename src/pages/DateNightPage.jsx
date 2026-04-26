@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronRight, Sparkles, SlidersHorizontal } from 'lucide-react'
 import { differenceInCalendarDays } from 'date-fns'
 import { DATE_BUDGET_OPTIONS, DATE_CATEGORY_OPTIONS, DATE_DURATION_OPTIONS, generateDateSuggestions, getDateIdeaPool, getDateNightDueAt, groupDateIdeas, pickDateForUs } from '../lib/date-night'
+import { fetchAiDateIdeas } from '../lib/aiDateSuggestions'
 import { toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 import { SectionCard } from '../components/SectionCard'
@@ -112,6 +113,7 @@ export function DateNightPage({
   onArchiveDateIdea,
   onUnarchiveDateIdea,
   onCancelPlannedDate,
+  onAddAiDateIdea,
 }) {
   const [dateFilters, setDateFilters] = useState({ budget: 'Any', duration: 'Any', category: 'Any' })
   const [searchQuery, setSearchQuery] = useState('')
@@ -120,6 +122,9 @@ export function DateNightPage({
   const [recentOpen, setRecentOpen] = useState(false)
   const [archivedOpen, setArchivedOpen] = useState(false)
   const [previewPick, setPreviewPick] = useState(null)
+  const [aiIdeas, setAiIdeas] = useState([])
+  const [aiIdeasBusy, setAiIdeasBusy] = useState(false)
+  const [addedAiTitles, setAddedAiTitles] = useState([])
 
   const dateIdeasById = useMemo(
     () => Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea])),
@@ -186,6 +191,29 @@ export function DateNightPage({
     const pool = filteredPool.length ? filteredPool : (ideaPool.length ? ideaPool : searchedIdeaPool)
     const next = pickDateForUs(pool, dateHistory ?? [], dateFilters)
     setPreviewPick(next ?? fallbackPick ?? null)
+  }
+
+  async function handleGenerateAiIdeas() {
+    setAiIdeasBusy(true)
+    try {
+      const existingTitles = (dateIdeas ?? []).map((idea) => idea.title)
+      const recentHistory = recentCompletedDates.map((entry) => ({
+        title: entry.idea?.title ?? entry.taskTitle ?? '',
+        rating: entry.rating ?? 0,
+      }))
+      const ideas = await fetchAiDateIdeas({ existingTitles, preferences: dateFilters, recentHistory })
+      setAiIdeas(ideas)
+      setAddedAiTitles([])
+    } catch (error) {
+      console.warn('AI date ideas failed.', error)
+    } finally {
+      setAiIdeasBusy(false)
+    }
+  }
+
+  async function handleAddAiIdea(idea) {
+    const result = await onAddAiDateIdea?.(idea)
+    if (!result?.blocked) setAddedAiTitles((current) => [...current, idea.title])
   }
 
   return (
@@ -275,13 +303,24 @@ export function DateNightPage({
             title="Date ideas"
             subtitle="Get suggestions or browse your full list."
             action={(
-              <button
-                className="rounded-full bg-white px-3 py-2 text-sm text-slate-600 transition duration-150 active:scale-[0.98]"
-                type="button"
-                onClick={onOpenDateIdeaModal}
-              >
-                Add idea
-              </button>
+              <div className="flex gap-2">
+                <button
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition duration-150 active:scale-[0.98] ${aiIdeasBusy ? 'bg-accentSoft text-accent' : 'bg-white text-slate-600'}`}
+                  type="button"
+                  disabled={aiIdeasBusy}
+                  onClick={handleGenerateAiIdeas}
+                >
+                  <Sparkles size={13} />
+                  {aiIdeasBusy ? 'Thinking…' : 'Suggest'}
+                </button>
+                <button
+                  className="rounded-full bg-white px-3 py-2 text-sm text-slate-600 transition duration-150 active:scale-[0.98]"
+                  type="button"
+                  onClick={onOpenDateIdeaModal}
+                >
+                  Add idea
+                </button>
+              </div>
             )}
           >
             <label className="flex items-center gap-3 rounded-3xl bg-white px-4 py-3 text-slate-500">
@@ -367,6 +406,57 @@ export function DateNightPage({
                 </div>
               )}
             </div>
+
+            {aiIdeas.length > 0 ? (
+              <div className="border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">AI suggestions</p>
+                  <button
+                    className="text-xs text-slate-400 transition duration-150 active:opacity-50"
+                    type="button"
+                    onClick={handleGenerateAiIdeas}
+                    disabled={aiIdeasBusy}
+                  >
+                    {aiIdeasBusy ? 'Thinking…' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {aiIdeas.map((idea) => {
+                    const added = addedAiTitles.includes(idea.title)
+                    return (
+                      <div key={idea.title} className="rounded-3xl bg-accentSoft p-4">
+                        <p className="font-medium text-ink">{idea.title}</p>
+                        {idea.description ? <p className="mt-1 text-sm text-slate-600">{idea.description}</p> : null}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {[idea.category, idea.budgetLevel, idea.duration].filter(Boolean).map((tag) => (
+                            <span key={tag} className="rounded-full bg-white/70 px-3 py-1 text-xs text-slate-500">{tag}</span>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            className={`flex-1 rounded-2xl px-3 py-2 text-sm font-semibold transition duration-150 active:scale-[0.98] ${added ? 'bg-white text-slate-400' : 'bg-accent text-white'}`}
+                            type="button"
+                            disabled={added}
+                            onClick={() => handleAddAiIdea(idea)}
+                          >
+                            {added ? 'Added to list' : 'Add to my list'}
+                          </button>
+                          {!added ? (
+                            <button
+                              className="rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-accent transition duration-150 active:scale-[0.98]"
+                              type="button"
+                              onClick={() => { handleAddAiIdea(idea); onSelectDateIdea({ ...idea, id: `ai-${idea.title}` }) }}
+                            >
+                              Add &amp; plan
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-1 border-t border-slate-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Your ideas</p>

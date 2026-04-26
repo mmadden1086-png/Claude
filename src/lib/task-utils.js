@@ -83,7 +83,7 @@ export function buildRepeatPreview(task) {
 
 export function createTaskPayload(form, currentUser) {
   const now = new Date().toISOString()
-  const dueDate = form.dueDate || new Date().toISOString()
+  const dueDate = form.dueDate ? new Date(form.dueDate + 'T12:00:00').toISOString() : new Date().toISOString()
   return {
     clientRequestId: crypto.randomUUID(),
     title: form.title.trim(),

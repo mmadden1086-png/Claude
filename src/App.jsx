@@ -534,6 +534,26 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     }
   }
 
+  async function handleAddAiDateIdea(idea) {
+    try {
+      await actions.createDateIdea({
+        title: idea.title,
+        description: idea.description ?? '',
+        category: idea.category ?? '',
+        budgetLevel: idea.budgetLevel ?? '',
+        duration: idea.duration ?? '',
+        locationType: idea.locationType ?? '',
+        tags: [],
+        status: 'active',
+        usageCount: 0,
+        lastUsedAt: null,
+      })
+      addToast(`"${idea.title}" added to your list`, null)
+    } catch {
+      addToast('Could not save idea', null)
+    }
+  }
+
   async function handleCreateDateIdea(form) {
     setDateIdeaSaveBusy(true)
     try {
@@ -1428,6 +1448,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     onArchiveDateIdea: handleArchiveDateIdea,
     onUnarchiveDateIdea: handleUnarchiveDateIdea,
     onCancelPlannedDate: handleCancelDateTask,
+    onAddAiDateIdea: handleAddAiDateIdea,
     onStartHere: handleStartHere,
     onQuickAdd: handleQuickAdd,
     onCreateDateIdea: handleCreateDateIdea,
@@ -1492,6 +1513,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
           onAction={handleTaskAction}
           onSave={(updates) => handleTaskSave(openTask.id, updates)}
           onDelete={({ scope } = {}) => handleDeleteTask(openTask, scope ?? 'single')}
+          onQuickAdd={handleQuickAdd}
           onAddComment={(text) => handleAddComment(openTask.id, text)}
         />
       ) : null}

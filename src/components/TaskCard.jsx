@@ -77,10 +77,6 @@ export function TaskCard({
   const clarity = meaningfulClarity(task)
 
   function handleCardClick() {
-    if (isFocus && status === TASK_STATUS.NOT_STARTED) {
-      onAction?.('start', task, { source: 'focus' })
-      return
-    }
     if (!interactive) return
     onOpen(task.id)
   }
@@ -198,18 +194,18 @@ export function TaskCard({
 
       <div className="mt-4 flex flex-col gap-2">
         <button
-          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98]"
+          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98] active:opacity-80"
           type="button"
           onClick={(event) => stopAndRun(event, primaryAction.action)}
         >
           <primaryAction.icon size={16} /> {primaryAction.label}
         </button>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-wrap gap-2">
           {secondaryActions.map((item) => (
             <button
               key={item.action}
-              className="flex min-h-[44px] min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
+              className="flex min-h-[44px] min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98] active:opacity-75"
               type="button"
               onClick={(event) => stopAndRun(event, item.action)}
             >
@@ -217,6 +213,16 @@ export function TaskCard({
             </button>
           ))}
         </div>
+
+        {interactive ? (
+          <button
+            className="py-1 text-center text-sm text-slate-400 transition duration-150 active:opacity-50"
+            type="button"
+            onClick={(event) => { event.stopPropagation(); onOpen(task.id) }}
+          >
+            View details
+          </button>
+        ) : null}
       </div>
     </article>
   )
