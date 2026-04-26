@@ -528,6 +528,26 @@ function App() {
     }
   }
 
+  async function handleAddAiDateIdea(idea) {
+    try {
+      await actions.createDateIdea({
+        title: idea.title,
+        description: idea.description ?? '',
+        category: idea.category ?? '',
+        budgetLevel: idea.budgetLevel ?? '',
+        duration: idea.duration ?? '',
+        locationType: idea.locationType ?? '',
+        tags: [],
+        status: 'active',
+        usageCount: 0,
+        lastUsedAt: null,
+      })
+      addToast(`"${idea.title}" added to your list`, null)
+    } catch {
+      addToast('Could not save idea', null)
+    }
+  }
+
   async function handleCreateDateIdea(form) {
     setDateIdeaSaveBusy(true)
     try {
@@ -1396,6 +1416,7 @@ function App() {
     onArchiveDateIdea: handleArchiveDateIdea,
     onUnarchiveDateIdea: handleUnarchiveDateIdea,
     onCancelPlannedDate: handleCancelDateTask,
+    onAddAiDateIdea: handleAddAiDateIdea,
     onStartHere: handleStartHere,
     onQuickAdd: handleQuickAdd,
     onCreateDateIdea: handleCreateDateIdea,
@@ -1461,6 +1482,7 @@ function App() {
           onAction={handleTaskAction}
           onSave={(updates) => handleTaskSave(openTask.id, updates)}
           onDelete={({ scope } = {}) => handleDeleteTask(openTask, scope ?? 'single')}
+          onQuickAdd={handleQuickAdd}
         />
       ) : null}
 

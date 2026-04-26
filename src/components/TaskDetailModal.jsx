@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
 import { TimeSelect } from './TimeSelect'
@@ -18,6 +18,7 @@ import { fetchAiTaskSuggestion } from '../lib/aiTaskSuggestions'
 import { generateDoneSuggestion, saveDonePattern } from '../lib/suggestionEngine'
 import { buildRepeatPreview } from '../lib/task-utils'
 import { getWhyDisplayDecision } from '../lib/why-strength'
+import { fetchTaskBreakdown } from '../lib/aiTaskBreakdown'
 
 function toDateInput(value) {
   const date = toDate(value)
@@ -45,7 +46,7 @@ function createFormState(task) {
   }
 }
 
-export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose, onSave, onDelete, onAction }) {
+export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose, onSave, onDelete, onAction, onQuickAdd }) {
   const [form, setForm] = useState(() => createFormState(task))
   const [isEditing, setIsEditing] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -59,6 +60,9 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
   const [whySeed, setWhySeed] = useState(0)
   const suggestedDoneRef = useRef('')
   const suggestedWhyRef = useRef('')
+  const [breakdownSteps, setBreakdownSteps] = useState([])
+  const [breakdownBusy, setBreakdownBusy] = useState(false)
+  const [addedStepTitles, setAddedStepTitles] = useState([])
   const assigneeOptions = [
     ...users.map((user) => ({
       ...user,
@@ -263,6 +267,45 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
     onClose?.()
   }
 
+  async function handleBreakdown() {
+    setBreakdownBusy(true)
+    try {
+      const steps = await fetchTaskBreakdown({ title: task.title, notes: task.notes ?? '', clarity: task.clarity ?? '' })
+      setBreakdownSteps(steps)
+      setAddedStepTitles([])
+    } catch (error) {
+      console.warn('Task breakdown failed.', error)
+    } finally {
+      setBreakdownBusy(false)
+    }
+  }
+
+  async function handleAddStep(step) {
+    const result = await onQuickAdd?.({
+      title: step.title,
+      notes: `Part of: ${task.title}`,
+      assignedTo: task.assignedTo ?? currentUser.id,
+      dueDate: '',
+      dueTime: '',
+      urgency: task.urgency ?? 'This week',
+      effort: step.effort,
+      category: task.category ?? 'Home',
+      clarity: step.doneWhen || '',
+      whyThisMatters: task.whyThisMatters ?? '',
+      repeatType: 'none',
+      repeatDays: [],
+    })
+    if (!result?.blocked) setAddedStepTitles((current) => [...current, step.title])
+  }
+
+  async function handleAddAllSteps() {
+    for (const step of breakdownSteps) {
+      if (!addedStepTitles.includes(step.title)) {
+        await handleAddStep(step)
+      }
+    }
+  }
+
   if (!isEditing) {
     return (
       <section className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm sm:items-center" onClick={onClose}>
@@ -412,6 +455,56 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
                 Close
               </button>
             </div>
+
+            {task.effort === 'Heavy' ? (
+              <div className="rounded-3xl bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Break this down</p>
+                  {breakdownSteps.length > 0 && !addedStepTitles.length ? (
+                    <button
+                      className="rounded-2xl bg-accent px-3 py-1.5 text-xs font-semibold text-white transition duration-150 active:scale-[0.98] active:opacity-80"
+                      type="button"
+                      onClick={handleAddAllSteps}
+                    >
+                      Add all steps
+                    </button>
+                  ) : null}
+                </div>
+                {breakdownSteps.length ? (
+                  <div className="mt-3 space-y-2">
+                    {breakdownSteps.map((step) => {
+                      const added = addedStepTitles.includes(step.title)
+                      return (
+                        <div key={step.title} className="flex items-start gap-3 rounded-2xl bg-canvas px-3 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-ink">{step.title}</p>
+                            {step.doneWhen ? <p className="mt-0.5 text-xs text-slate-500">{step.doneWhen}</p> : null}
+                          </div>
+                          <button
+                            className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition duration-150 active:scale-[0.97] ${added ? 'bg-white text-slate-400' : 'bg-accent text-white'}`}
+                            type="button"
+                            disabled={added}
+                            onClick={() => handleAddStep(step)}
+                          >
+                            {added ? 'Added' : 'Add'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <button
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-canvas px-4 py-3 text-sm font-medium text-slate-600 transition duration-150 active:scale-[0.98] active:opacity-75"
+                    type="button"
+                    disabled={breakdownBusy}
+                    onClick={handleBreakdown}
+                  >
+                    <Sparkles size={14} />
+                    {breakdownBusy ? 'Thinking…' : 'Break into steps with AI'}
+                  </button>
+                )}
+              </div>
+            ) : null}
 
             <button
               className="w-full rounded-3xl bg-danger/10 px-4 py-4 text-sm font-semibold text-danger transition duration-150 active:scale-[0.99] active:opacity-80"

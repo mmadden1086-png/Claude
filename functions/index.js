@@ -453,6 +453,178 @@ Return JSON:
   }
 })
 
+export const suggestDateIdeas = onRequest({ region: 'us-central1', cors: true }, async (request, response) => {
+  if (request.method === 'OPTIONS') {
+    response.status(204).send('')
+    return
+  }
+
+  if (request.method !== 'POST') {
+    response.set('Allow', 'POST')
+    response.status(405).json({ error: 'Method not allowed' })
+    return
+  }
+
+  const existingTitles = Array.isArray(request.body?.existingTitles) ? request.body.existingTitles.slice(0, 20) : []
+  const preferences = {
+    budget: typeof request.body?.preferences?.budget === 'string' ? request.body.preferences.budget : 'Any',
+    duration: typeof request.body?.preferences?.duration === 'string' ? request.body.preferences.duration : 'Any',
+    category: typeof request.body?.preferences?.category === 'string' ? request.body.preferences.category : 'Any',
+  }
+  const recentHistory = Array.isArray(request.body?.recentHistory) ? request.body.recentHistory.slice(0, 5) : []
+
+  try {
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) throw new Error('OPENAI_API_KEY is not configured.')
+
+    const openai = new OpenAI({ apiKey })
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.85,
+      max_tokens: 450,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You suggest fresh date night ideas for couples.
+
+Rules:
+- Return exactly 3 ideas the couple hasn't tried yet.
+- Each idea should be practical and specific — not vague.
+- Keep titles short (3-6 words).
+- Descriptions: 1 sentence, real and grounded.
+- Match budget/duration/category preferences if given (not "Any").
+- Avoid repeating any title from the existing list.
+- No therapy language, grand declarations, or filler.
+- Sound like a friend who knows them well, not a planning app.
+
+Categories: "At home" | "Outing" | "Food" | "Creative" | "Adventure" | "Relaxing"
+Budget: "Free" | "Low" | "Medium" | "High"
+Duration: "30-60 min" | "1-2 hours" | "2-4 hours" | "Half day"
+Location: "Home" | "Out" | "Either"
+
+Return strict JSON:
+{
+  "ideas": [
+    { "title": string, "description": string, "category": string, "budgetLevel": string, "duration": string, "locationType": string }
+  ]
+}`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({ existingIdeas: existingTitles, preferences, recentHistory }),
+        },
+      ],
+    })
+
+    const content = completion.choices[0]?.message?.content ?? ''
+    try {
+      const parsed = JSON.parse(content)
+      const ideas = Array.isArray(parsed.ideas)
+        ? parsed.ideas
+            .map((idea) => ({
+              title: typeof idea.title === 'string' ? idea.title.trim() : '',
+              description: typeof idea.description === 'string' ? idea.description.trim() : '',
+              category: typeof idea.category === 'string' ? idea.category.trim() : 'Outing',
+              budgetLevel: typeof idea.budgetLevel === 'string' ? idea.budgetLevel.trim() : 'Low',
+              duration: typeof idea.duration === 'string' ? idea.duration.trim() : '1-2 hours',
+              locationType: typeof idea.locationType === 'string' ? idea.locationType.trim() : 'Either',
+            }))
+            .filter((idea) => idea.title)
+            .slice(0, 3)
+        : []
+      response.status(200).json({ ideas })
+    } catch {
+      response.status(200).json({ ideas: [] })
+    }
+  } catch (error) {
+    console.error('Date idea suggestion failed.', error)
+    response.status(200).json({ ideas: [] })
+  }
+})
+
+export const suggestTaskBreakdown = onRequest({ region: 'us-central1', cors: true }, async (request, response) => {
+  if (request.method === 'OPTIONS') {
+    response.status(204).send('')
+    return
+  }
+
+  if (request.method !== 'POST') {
+    response.set('Allow', 'POST')
+    response.status(405).json({ error: 'Method not allowed' })
+    return
+  }
+
+  const title = typeof request.body?.title === 'string' ? request.body.title.trim() : ''
+  const notes = typeof request.body?.notes === 'string' ? request.body.notes.trim().slice(0, 300) : ''
+  const clarity = typeof request.body?.clarity === 'string' ? request.body.clarity.trim().slice(0, 200) : ''
+
+  if (!title) {
+    response.status(400).json({ error: 'A task title is required.' })
+    return
+  }
+
+  try {
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) throw new Error('OPENAI_API_KEY is not configured.')
+
+    const openai = new OpenAI({ apiKey })
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      max_tokens: 350,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You break a large household or relationship task into 2-4 concrete smaller steps.
+
+Rules:
+- Each step must be completable in one sitting.
+- Steps must be in logical order.
+- Titles: short, action-oriented, no more than 8 words.
+- doneWhen: one concrete, observable finish line.
+- Effort: "Quick" (under 30 min), "Medium" (1-2 hours). Avoid "Heavy".
+- Do not repeat or paraphrase the parent task title.
+- No fluff or obvious filler steps.
+
+Return strict JSON:
+{
+  "steps": [
+    { "title": string, "effort": "Quick" | "Medium", "doneWhen": string }
+  ]
+}`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({ title, notes, clarity }),
+        },
+      ],
+    })
+
+    const content = completion.choices[0]?.message?.content ?? ''
+    try {
+      const parsed = JSON.parse(content)
+      const steps = Array.isArray(parsed.steps)
+        ? parsed.steps
+            .map((step) => ({
+              title: typeof step.title === 'string' ? step.title.trim() : '',
+              effort: ['Quick', 'Medium', 'Heavy'].includes(step.effort) ? step.effort : 'Quick',
+              doneWhen: typeof step.doneWhen === 'string' ? step.doneWhen.trim() : '',
+            }))
+            .filter((step) => step.title)
+            .slice(0, 4)
+        : []
+      response.status(200).json({ steps })
+    } catch {
+      response.status(200).json({ steps: [] })
+    }
+  } catch (error) {
+    console.error('Task breakdown failed.', error)
+    response.status(200).json({ steps: [] })
+  }
+})
+
 export const onTaskCreated = onDocumentCreated('tasks/{taskId}', async (event) => {
   const task = event.data?.data()
   if (!task) return
