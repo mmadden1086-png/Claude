@@ -133,7 +133,7 @@ export function FocusPage({
               {accountabilityBanner}
             </div>
           ) : null}
-          <FocusInsightBanner insight={checkInReview ? { body: getWeeklyCheckInOpening(checkInReview) } : null} />
+          <FocusInsightBanner insight={checkInReview?.agenda?.length ? { body: getWeeklyCheckInOpening(checkInReview) } : null} />
           {guidance ? (
             guidance.onClick ? (
               <button className="inline-flex px-1 text-sm font-medium text-slate-500 underline-offset-4 transition hover:text-accent hover:underline" type="button" onClick={guidance.onClick}>
