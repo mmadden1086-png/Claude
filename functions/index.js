@@ -591,12 +591,14 @@ export const morningDigest = onSchedule(
     const usersSnapshot = await db.collection('users').get()
     await Promise.all(
       usersSnapshot.docs.map(async (userDoc) => {
-        const tasksSnapshot = await db
-          .collection('tasks')
-          .where('assignedTo', '==', userDoc.id)
-          .where('isCompleted', '==', false)
-          .get()
-        const tasks = tasksSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        const [personalSnap, bothSnap] = await Promise.all([
+          db.collection('tasks').where('assignedTo', '==', userDoc.id).where('isCompleted', '==', false).get(),
+          db.collection('tasks').where('assignedTo', '==', 'both').where('isCompleted', '==', false).get(),
+        ])
+        const tasks = [
+          ...personalSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          ...bothSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+        ]
         const topTask = tasks[0]
         if (!topTask) return
         await sendToUser(
@@ -619,12 +621,11 @@ export const eveningWrapUp = onSchedule(
     const usersSnapshot = await db.collection('users').get()
     await Promise.all(
       usersSnapshot.docs.map(async (userDoc) => {
-        const tasksSnapshot = await db
-          .collection('tasks')
-          .where('assignedTo', '==', userDoc.id)
-          .where('isCompleted', '==', false)
-          .get()
-        const openCount = tasksSnapshot.size
+        const [personalSnap, bothSnap] = await Promise.all([
+          db.collection('tasks').where('assignedTo', '==', userDoc.id).where('isCompleted', '==', false).get(),
+          db.collection('tasks').where('assignedTo', '==', 'both').where('isCompleted', '==', false).get(),
+        ])
+        const openCount = personalSnap.size + bothSnap.size
         if (!openCount) return
         await sendToUser(userDoc.id, 'Follow Through', `${openCount} still open. Quick win before tomorrow?`, {
           kind: 'evening',
@@ -642,6 +643,7 @@ export const dueSoonSweep = onSchedule(
   async () => {
     const now = Date.now()
     const windowEnd = now + 2 * 60 * 60 * 1000
+    const cooldownMs = 4 * 60 * 60 * 1000
     const tasksSnapshot = await db.collection('tasks').where('isCompleted', '==', false).get()
 
     await Promise.all(
@@ -649,9 +651,16 @@ export const dueSoonSweep = onSchedule(
         const task = taskDoc.data()
         const dueDate = task.dueDate?.toDate ? task.dueDate.toDate().getTime() : new Date(task.dueDate).getTime()
         if (Number.isNaN(dueDate) || dueDate < now || dueDate > windowEnd) return
+
+        const lastNotified = task.dueSoonNotifiedAt?.toDate?.()?.getTime() ?? null
+        if (lastNotified && now - lastNotified < cooldownMs) return
+
         await sendToUser(task.assignedTo, 'Follow Through', `${task.title} needs attention`, {
           taskId: taskDoc.id,
           kind: 'due-soon',
+        })
+        await db.collection('tasks').doc(taskDoc.id).update({
+          dueSoonNotifiedAt: admin.firestore.FieldValue.serverTimestamp(),
         })
       }),
     )

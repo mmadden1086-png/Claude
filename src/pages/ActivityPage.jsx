@@ -1,40 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { StatsCard } from '../components/StatsCard'
 import { TaskCard } from '../components/TaskCard'
-import { BOTH_ASSIGNEE_ID, TASK_STATUS } from '../lib/constants'
-import { fetchCheckInTaskSuggestions } from '../lib/check-in-ai'
-import { buildWeeklyCheckInReview, getWeeklyCheckInOpening } from '../lib/check-in-review'
+import { TASK_STATUS } from '../lib/constants'
 import { formatLastHandled, getTaskStatus, isOverdue, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'checkin', label: 'Check-in' },
   { id: 'history', label: 'History' },
 ]
-
-function isCompletedWithinDays(task, days) {
-  const completedAt = toDate(task.completedAt)
-  if (!completedAt) return false
-  return differenceInCalendarDays(new Date(), completedAt) <= days
-}
-
-function isOverdueByDays(task, days) {
-  const dueDate = toDate(task.dueDate)
-  if (!dueDate) return false
-  return differenceInCalendarDays(new Date(), dueDate) > days
-}
-
-function compactTaskRow(task, onOpenTask) {
-  return (
-    <button key={task.id} className="w-full rounded-2xl bg-canvas px-3 py-2 text-left text-sm text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenTask(task.id)}>
-      {task.title}
-    </button>
-  )
-}
 
 function ActionRow({ task, subtitle, onOpenTask, actions }) {
   return (
@@ -80,18 +56,10 @@ export function ActivityPage({
   onRepeatDateIdea,
   onOpenDateNight,
   onStartHere,
-  onCheckInComplete,
-  onQuickAdd,
   taskMotionState,
 }) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
-  const [checkInSuggestions, setCheckInSuggestions] = useState([])
-  const [checkInSuggestionsBusy, setCheckInSuggestionsBusy] = useState(false)
-  const [addedSuggestionTitles, setAddedSuggestionTitles] = useState([])
-  const [dismissedSuggestions, setDismissedSuggestions] = useState(new Set())
-
-  const checkInActive = activeTab === 'checkin'
 
   const unreadPartnerTasks = filteredTasks.filter((task) => task.requestedBy === partner.id && !task.acknowledgedAt)
   const draggingTasks = sections?.draggingTasks ?? []
@@ -100,101 +68,10 @@ export function ActivityPage({
   const lastCheckInDate = toDate(currentUser.checkIn?.lastCompletedAt ?? currentUser.lastCheckInAt)
   const lastDateNight = dateNightSummary.lastDate
 
-  const completedLastWeek = useMemo(
-    () => (tasks ?? []).filter((task) => getTaskStatus(task) === TASK_STATUS.COMPLETED && isCompletedWithinDays(task, 7)).slice(0, 4),
-    [tasks],
-  )
   const overdueTasks = useMemo(
     () => filteredTasks.filter((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED).slice(0, 4),
     [filteredTasks],
   )
-  const partnerTasks = useMemo(
-    () => filteredTasks.filter((task) => task.requestedBy && task.requestedBy !== currentUser.id && getTaskStatus(task) !== TASK_STATUS.COMPLETED).slice(0, 4),
-    [filteredTasks, currentUser.id],
-  )
-  const discussionTasks = useMemo(() => {
-    const seen = new Set()
-    return filteredTasks
-      .filter((task) => {
-        const status = getTaskStatus(task)
-        const partnerUntouched = task.requestedBy && task.requestedBy !== currentUser.id && !task.acknowledgedAt && !task.startedAt
-        return status !== TASK_STATUS.COMPLETED && (isOverdueByDays(task, 3) || partnerUntouched)
-      })
-      .filter((task) => {
-        if (seen.has(task.id)) return false
-        seen.add(task.id)
-        return true
-      })
-      .slice(0, 4)
-  }, [filteredTasks, currentUser.id])
-
-  const checkInReview = useMemo(
-    () => buildWeeklyCheckInReview({ tasks: tasks ?? [], currentUserId: currentUser.id, partnerId: partner?.id }),
-    [tasks, currentUser.id, partner?.id],
-  )
-  const checkInOpening = getWeeklyCheckInOpening(checkInReview)
-
-  useEffect(() => {
-    if (!checkInActive) return undefined
-    const abortController = new AbortController()
-    const timeoutId = window.setTimeout(async () => {
-      setCheckInSuggestionsBusy(true)
-      try {
-        const suggestions = await fetchCheckInTaskSuggestions(
-          {
-            currentUser,
-            partner,
-            completedTasks: completedLastWeek,
-            overdueTasks,
-            partnerTasks,
-            discussionTasks,
-          },
-          abortController.signal,
-        )
-        if (!abortController.signal.aborted) setCheckInSuggestions(suggestions)
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.warn('AI check-in task suggestions failed.', error)
-          if (!abortController.signal.aborted) setCheckInSuggestions([])
-        }
-      } finally {
-        if (!abortController.signal.aborted) setCheckInSuggestionsBusy(false)
-      }
-    }, 300)
-
-    return () => {
-      abortController.abort()
-      window.clearTimeout(timeoutId)
-    }
-  }, [checkInActive, completedLastWeek, currentUser, discussionTasks, overdueTasks, partner, partnerTasks])
-
-  function resolveSuggestionAssignee(value) {
-    if (value === 'currentUser') return currentUser.id
-    if (value === 'partner') return partner?.id ?? BOTH_ASSIGNEE_ID
-    if (value === 'both') return BOTH_ASSIGNEE_ID
-    return value || BOTH_ASSIGNEE_ID
-  }
-
-  async function handleAddCheckInSuggestion(suggestion) {
-    const result = await onQuickAdd?.({
-      title: suggestion.title,
-      notes: suggestion.reason || '',
-      assignedTo: resolveSuggestionAssignee(suggestion.assignedTo),
-      dueDate: '',
-      dueTime: '',
-      urgency: 'This week',
-      effort: ['Quick', 'Medium', 'Heavy'].includes(suggestion.effort) ? suggestion.effort : 'Quick',
-      category: suggestion.category || 'Home',
-      clarity: suggestion.doneWhen || '',
-      whyThisMatters: suggestion.why || suggestion.reason || '',
-      repeatType: 'none',
-      repeatDays: [],
-    })
-    if (!result?.blocked) {
-      setAddedSuggestionTitles((current) => [...current, suggestion.title])
-    }
-  }
-
   function handleDrilldown(view) {
     if (view?.type === 'open') {
       navigate('/tasks')
@@ -216,128 +93,6 @@ export function ActivityPage({
     taskMotionState,
   }
 
-  // ── Check-in prep content (Check-in tab) ──
-  const checkInPrepContent = (
-    <div className="space-y-3">
-      {checkInOpening ? (
-        <p className="px-1 text-sm font-medium text-slate-700">{checkInOpening}</p>
-      ) : null}
-
-      {checkInReview.agenda.length ? (
-        <div className="space-y-2">
-          {checkInReview.agenda.map((item) => (
-            <div key={item.id} className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
-              <p className="text-sm font-semibold text-ink">{item.title}</p>
-              {item.reason ? <p className="mt-1 text-xs text-slate-500">{item.reason}</p> : null}
-              {item.suggestedQuestion ? <p className="mt-2 text-xs font-medium text-accent">{item.suggestedQuestion}</p> : null}
-              <button
-                className="mt-2 rounded-2xl bg-canvas px-3 py-2 text-xs font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
-                type="button"
-                onClick={() => onOpenTask(item.id)}
-              >
-                Open
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-3xl bg-canvas px-4 py-4 text-sm text-slate-500">No agenda items right now.</div>
-      )}
-
-      {checkInReview.completed.length ? (
-        <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Completed this week</p>
-          <div className="mt-2 space-y-2">
-            {checkInReview.completed.map((task) => compactTaskRow(task, onOpenTask))}
-          </div>
-        </div>
-      ) : null}
-
-      {lastDateNight ? (
-        <div className="rounded-3xl bg-accentSoft p-3 text-sm text-accent">
-          <p className="font-semibold">Last date night</p>
-          <p>{dateIdeasById[lastDateNight.ideaId]?.title ?? lastDateNight.taskTitle ?? 'Date night'}{lastDateNight.rating ? ` — ${lastDateNight.rating}/5` : ''}</p>
-          {lastDateNight.notes ? <p className="mt-1 text-xs text-accent/80">{lastDateNight.notes}</p> : null}
-        </div>
-      ) : null}
-
-      <div className="rounded-3xl bg-white p-3 ring-1 ring-slate-100">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">AI suggested tasks</p>
-          {checkInSuggestionsBusy ? <span className="text-xs text-slate-500">Loading suggestions…</span> : null}
-        </div>
-        <div className="mt-2 space-y-2">
-          {checkInSuggestions.filter((s) => !dismissedSuggestions.has(s.title)).length ? (
-            checkInSuggestions
-              .filter((s) => !dismissedSuggestions.has(s.title))
-              .map((suggestion) => {
-                const added = addedSuggestionTitles.includes(suggestion.title)
-                return (
-                  <div key={suggestion.title} className="rounded-2xl bg-canvas p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-ink">{suggestion.title}</p>
-                      <button
-                        className="shrink-0 text-slate-400 transition hover:text-slate-600 active:scale-[0.98]"
-                        type="button"
-                        aria-label="Dismiss suggestion"
-                        onClick={() => setDismissedSuggestions((current) => new Set([...current, suggestion.title]))}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    {suggestion.reason ? <p className="mt-1 text-xs text-slate-500">{suggestion.reason}</p> : null}
-                    <button
-                      className={`mt-3 rounded-2xl px-3 py-2 text-xs font-semibold transition duration-150 active:scale-[0.98] ${added ? 'bg-white text-slate-400' : 'bg-accent text-white'}`}
-                      type="button"
-                      disabled={added}
-                      onClick={() => handleAddCheckInSuggestion(suggestion)}
-                    >
-                      {added ? 'Added' : 'Add task'}
-                    </button>
-                  </div>
-                )
-              })
-          ) : (
-            <p className="text-sm text-slate-500">
-              {checkInSuggestionsBusy ? 'Looking for useful next steps.' : 'No AI suggestions needed right now.'}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {draggingTasks.length ? (
-        <div className="space-y-3">
-          {draggingTasks.slice(0, 2).map((task) => (
-            <div key={task.id} className="rounded-3xl bg-canvas p-3">
-              <button className="text-left font-medium text-ink" type="button" onClick={() => onOpenTask(task.id)}>
-                {task.title}
-              </button>
-              {task._surfaceReason ? <p className="mt-1 text-xs text-slate-500">{task._surfaceReason}</p> : null}
-              <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <button className="rounded-2xl bg-white px-3 py-2 text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onTaskAction('reschedule', task)}>
-                  Reschedule
-                </button>
-                <button className="rounded-2xl bg-white px-3 py-2 text-slate-600 transition duration-150 active:scale-[0.98]" type="button" onClick={() => onTaskAction('remove', task)}>
-                  Remove
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-3xl bg-canvas px-4 py-4 text-sm text-slate-500">Nothing is dragging right now.</div>
-      )}
-
-      <button
-        className="w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
-        type="button"
-        onClick={onCheckInComplete}
-      >
-        Complete check-in
-      </button>
-    </div>
-  )
-
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -348,7 +103,7 @@ export function ActivityPage({
             meta={`${stats.totalCompleted} completed · ${stats.reliability}% reliability`}
           />
 
-          <div className="grid grid-cols-3 gap-1 rounded-3xl bg-white p-1 shadow-sm">
+          <div className="grid grid-cols-2 gap-1 rounded-3xl bg-white p-1 shadow-sm">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -386,13 +141,6 @@ export function ActivityPage({
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    className="rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
-                    type="button"
-                    onClick={() => setActiveTab('checkin')}
-                  >
-                    Start check-in
-                  </button>
                   <button className="rounded-2xl bg-white px-3 py-2 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={onOpenDateNight}>
                     Plan date night
                   </button>
@@ -452,13 +200,6 @@ export function ActivityPage({
                 </div>
               </SectionCard>
             </>
-          ) : null}
-
-          {/* ── Check-in tab ──────────────────────────────────────────────── */}
-          {activeTab === 'checkin' ? (
-            <SectionCard title="Check-in prep" subtitle="Review what to bring into your next check-in.">
-              {checkInPrepContent}
-            </SectionCard>
           ) : null}
 
           {/* ── History tab ───────────────────────────────────────────────── */}
