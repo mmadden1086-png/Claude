@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarClock, Filter, Search } from 'lucide-react'
+import { CalendarClock, Search } from 'lucide-react'
 import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { QuickAddCard } from '../components/QuickAddCard'
@@ -182,21 +182,6 @@ export function TasksPage({
             title="Tasks"
             body="Browse everything or jump into one bucket."
             meta={`${activeCount} active asks`}
-            actions={
-              <div className="flex flex-wrap items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600">
-                <Filter size={14} />
-                {FILTERS.map((filter) => (
-                  <button
-                    key={filter.id}
-                    className={`rounded-full px-3 py-1 ${filter.id === filterId ? 'bg-accent text-white' : ''}`}
-                    type="button"
-                    onClick={() => setFilterId(filter.id)}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
-            }
           />
 
           <div className="space-y-1">
@@ -223,6 +208,19 @@ export function TasksPage({
             {searchQuery ? (
               <p className="px-2 text-xs text-slate-400">Press Enter to add "{searchQuery}" as a new task</p>
             ) : null}
+          </div>
+
+          <div className="grid grid-cols-3 gap-1 rounded-3xl bg-white p-1 shadow-sm">
+            {FILTERS.map((filter) => (
+              <button
+                key={filter.id}
+                className={`rounded-2xl px-2 py-3 text-xs font-semibold transition duration-150 active:opacity-75 ${filter.id === filterId ? 'bg-ink text-white' : 'text-slate-600'}`}
+                type="button"
+                onClick={() => setFilterId(filter.id)}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
 
           <div className="grid grid-cols-3 gap-1 rounded-3xl bg-white p-1 shadow-sm">
