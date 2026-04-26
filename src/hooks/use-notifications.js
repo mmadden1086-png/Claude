@@ -149,8 +149,11 @@ export function useNotifications(userId) {
           return
         }
 
-        await registerPushTokenOnServer(token)
-        window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
+        const storedToken = window.localStorage.getItem(NOTIFICATIONS_TOKEN_STORAGE_KEY)
+        if (token !== storedToken) {
+          await registerPushTokenOnServer(token)
+          window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
+        }
         window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, 'true')
         if (!cancelled) setStatus('enabled')
       } catch (error) {
