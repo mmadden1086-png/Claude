@@ -837,12 +837,15 @@ export const dueSoonSweep = onSchedule(
         if (lastNotified && now - lastNotified < cooldownMs) return
 
         const targetIds = task.assignedTo === 'both' ? allUserIds : [task.assignedTo]
+        const isProtected = task.protected === true
         await Promise.all(
           targetIds.map((uid) =>
-            sendToUser(uid, 'Follow Through', `${task.title} needs attention`, {
-              taskId: taskDoc.id,
-              kind: 'due-soon',
-            }),
+            sendToUser(
+              uid,
+              isProtected ? 'Protect this time' : 'Follow Through',
+              isProtected ? `Self-care reminder: ${task.title} is coming up` : `${task.title} needs attention`,
+              { taskId: taskDoc.id, kind: isProtected ? 'due-soon-protected' : 'due-soon' },
+            ),
           ),
         )
         await db.collection('tasks').doc(taskDoc.id).update({
@@ -969,6 +972,23 @@ const MESSAGE_POOLS = {
       "Your partner's tasks are really overdue — five or more pending.",
     ],
   },
+  fairness: {
+    low: [
+      'The task load has been a little uneven lately. Worth a look at the Balance tab.',
+      'One of you has been doing slightly more than the other recently.',
+      'A small imbalance is building up. The Balance tab in Activity shows the split.',
+    ],
+    medium: [
+      'One of you has been carrying noticeably more than the other. Worth talking about.',
+      'The household workload is uneven right now. Balance tab has the breakdown.',
+      'Worth a conversation about how tasks are splitting — things are lopsided.',
+    ],
+    high: [
+      "The household load is really lopsided right now — worth talking about before it builds.",
+      'One person is handling most of the household tasks. That is not sustainable.',
+      'A big imbalance in the task split. Now is a good time to redistribute.',
+    ],
+  },
 }
 
 const SEVERITY_RANK = { low: 1, medium: 2, high: 3 }
@@ -1007,6 +1027,13 @@ function partnerTasksSeverity(count) {
   return null
 }
 
+function fairnessSeverity(imbalance) {
+  if (imbalance > 0.25) return 'high'
+  if (imbalance > 0.2) return 'medium'
+  if (imbalance > 0.15) return 'low'
+  return null
+}
+
 function pickMessage(pool, lastMessage) {
   const candidates = pool.filter((m) => m !== lastMessage)
   const source = candidates.length ? candidates : pool
@@ -1015,7 +1042,7 @@ function pickMessage(pool, lastMessage) {
 
 // Returns { title, body, type, severity } for the highest-severity active issue,
 // or null if nothing warrants a notification.
-function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, lastMessage) {
+function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, fairnessImbalance, lastMessage) {
   const candidates = []
 
   const checkInSev = daysSinceCheckIn !== null ? checkInSeverity(daysSinceCheckIn) : null
@@ -1026,6 +1053,9 @@ function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, las
 
   const partnerSev = partnerTasksSeverity(staleCount)
   if (partnerSev) candidates.push({ type: 'partnerTasks', severity: partnerSev, rank: SEVERITY_RANK[partnerSev] })
+
+  const fairnessSev = fairnessImbalance !== null ? fairnessSeverity(fairnessImbalance) : null
+  if (fairnessSev) candidates.push({ type: 'fairness', severity: fairnessSev, rank: SEVERITY_RANK[fairnessSev] })
 
   if (!candidates.length) return null
 
@@ -1063,6 +1093,11 @@ export const smartDailyCheck = onSchedule(
     const daysSinceDateNight = latestDateNight ? Math.floor((now - latestDateNight) / oneDayMs) : null
 
     const usersSnapshot = await db.collection('users').get()
+
+    // Pre-fetch completed tasks for fairness computation across all users
+    const completedTasksSnapshot = await db.collection('tasks').where('isCompleted', '==', true).get()
+    const completedTasks = completedTasksSnapshot.docs.map((d) => d.data())
+
     await Promise.all(
       usersSnapshot.docs.map(async (userDoc) => {
         const user = userDoc.data()
@@ -1098,10 +1133,28 @@ export const smartDailyCheck = onSchedule(
             return Math.floor((now - createdAt) / oneDayMs) >= 3
           }).length
 
+        // ── Fairness imbalance ───────────────────────────────────────────
+        const partnerDoc = usersSnapshot.docs.find((d) => d.id !== userDoc.id)
+        const partnerId = partnerDoc?.id ?? null
+        let fairnessImbalance = null
+        if (partnerId) {
+          const myCompleted = completedTasks.filter((t) => t.assignedTo === userDoc.id).length
+          const partnerCompleted = completedTasks.filter((t) => t.assignedTo === partnerId).length
+          const totalCompleted = myCompleted + partnerCompleted
+          if (totalCompleted >= 10) {
+            const myShare = myCompleted / totalCompleted
+            const imbalance = myShare - 0.5
+            // Only alert the overloaded person (positive imbalance = I'm doing more)
+            if (imbalance > 0) {
+              fairnessImbalance = imbalance
+            }
+          }
+        }
+
         const lastMessage = notifications.lastMessage ?? null
 
         // ── Build notification ───────────────────────────────────────────
-        const notif = buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, lastMessage)
+        const notif = buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, fairnessImbalance, lastMessage)
         if (!notif) return
 
         // ── Dedupe ───────────────────────────────────────────────────────
@@ -1125,3 +1178,97 @@ export const smartDailyCheck = onSchedule(
     )
   },
 )
+
+// ── Relationship feature triggers ────────────────────────────────────────────
+
+// Notifies partner when: (1) user's mood drops to low, (2) appreciation is saved after check-in,
+// or (3) user answers today's daily dialogue question.
+export const onUserUpdated = onDocumentUpdated('users/{uid}', async (event) => {
+  const before = event.data.before.data()
+  const after = event.data.after.data()
+  const userId = event.params.uid
+
+  const usersSnapshot = await db.collection('users').get()
+  const partnerDoc = usersSnapshot.docs.find((d) => d.id !== userId)
+  if (!partnerDoc) return
+
+  const senderName = after.name ?? 'Your partner'
+
+  // 1. Mood low alert — only when crossing into low territory
+  const moodBefore = before.moodLevel ?? 3
+  const moodAfter = after.moodLevel
+  if (moodAfter && moodAfter <= 2 && moodBefore > 2) {
+    const label = moodAfter === 1 ? 'low' : 'rough'
+    await sendToUser(
+      partnerDoc.id,
+      'Follow Through',
+      `${senderName} is feeling ${label} today — might be worth checking in.`,
+      { kind: 'mood-alert' },
+    )
+  }
+
+  // 2. Appreciation received — when lastAppreciation changes to a non-empty value
+  const apprBefore = before.checkIn?.lastAppreciation ?? ''
+  const apprAfter = after.checkIn?.lastAppreciation ?? ''
+  if (apprAfter && apprAfter !== apprBefore) {
+    await sendToUser(
+      partnerDoc.id,
+      senderName,
+      'Left you some appreciation after their check-in — open the app to read it.',
+      { kind: 'appreciation' },
+    )
+  }
+
+  // 3. Daily dialogue answered — when today's answer is newly saved
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const dialogueBefore = before.dialogueAnswer ?? ''
+  const dialogueAfter = after.dialogueAnswer ?? ''
+  if (after.dialogueDateKey === todayKey && dialogueAfter && dialogueAfter !== dialogueBefore) {
+    await sendToUser(
+      partnerDoc.id,
+      senderName,
+      "answered today's question — add yours when you get a chance.",
+      { kind: 'dialogue' },
+    )
+  }
+})
+
+// Notifies both partners when the shared financial goal hits a progress milestone (25/50/75/100%).
+export const onSharedGoalUpdated = onDocumentUpdated('sharedGoals/household', async (event) => {
+  const before = event.data.before.data()
+  const after = event.data.after.data()
+
+  const target = after.targetAmount ?? 0
+  const current = after.currentAmount ?? 0
+  const prevCurrent = before.currentAmount ?? 0
+  if (!target || current <= prevCurrent) return
+
+  const percent = Math.floor((current / target) * 100)
+  const prevPercent = Math.floor((prevCurrent / target) * 100)
+  const notifiedMilestones = after.notifiedMilestones ?? []
+
+  const MILESTONES = [25, 50, 75, 100]
+  const MILESTONE_MESSAGES = {
+    25: (title) => `Quarter of the way there on ${title}! Keep going.`,
+    50: (title) => `Halfway to ${title} — you are doing it.`,
+    75: (title) => `Three-quarters saved toward ${title}. Almost there.`,
+    100: (title) => `You hit your goal: ${title}`,
+  }
+
+  for (const milestone of MILESTONES) {
+    if (percent >= milestone && prevPercent < milestone && !notifiedMilestones.includes(milestone)) {
+      const heading = milestone === 100 ? 'Goal reached!' : `${milestone}% there!`
+      const body = MILESTONE_MESSAGES[milestone](after.title ?? 'your goal')
+
+      const usersSnapshot = await db.collection('users').get()
+      await Promise.all(usersSnapshot.docs.map((d) =>
+        sendToUser(d.id, heading, body, { kind: 'goal-milestone', milestone: String(milestone) }),
+      ))
+
+      await db.doc('sharedGoals/household').update({
+        notifiedMilestones: admin.firestore.FieldValue.arrayUnion(milestone),
+      })
+      break // one milestone notification per update
+    }
+  }
+})
