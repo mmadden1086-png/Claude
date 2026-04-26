@@ -37,187 +37,55 @@ function shortImpactMessage(task, currentUser) {
   return impact.length > 96 ? `${impact.slice(0, 93).trim()}...` : impact
 }
 
-function listTags(task) {
-  const surfaceReason = task._surfaceReason ? { label: task._surfaceReason, tone: 'accent' } : null
-  const flagTags = getTaskFlags(task)
-  if (surfaceReason && flagTags.length) return [surfaceReason, ...flagTags].slice(0, 2)
-  if (surfaceReason) return [surfaceReason]
-  if (flagTags.length) return flagTags.slice(0, 2)
-
-  return [
-    task.category ? { label: task.category, tone: 'slate' } : null,
-    task.effort ? { label: task.effort, tone: 'accent' } : null,
-  ].filter(Boolean).slice(0, 2)
-}
-
 function meaningfulClarity(task) {
   if (!task.clarity?.trim()) return ''
-  if (task.clarity.trim().toLowerCase() === 'task completed and confirmed') return ''
   return task.clarity.trim()
 }
 
-export function TaskCard({
-  task,
-  currentUser,
-  onAction,
-  onOpen,
-  highlight = false,
-  variant = 'list',
-  messageOverride = '',
-  focusBadge = '',
-  referenceTitle = '',
-  motionState = '',
-}) {
-  const interactive = typeof onOpen === 'function'
+export function TaskCard({ task, currentUser, onAction, onOpen, variant = 'list' }) {
   const status = getTaskStatus(task)
   const whyDecision = getWhyDisplayDecision(task, task.whyThisMatters, currentUser.id)
-  const impactMessage = messageOverride || shortImpactMessage(task, currentUser)
-  const tags = listTags(task)
+  const impactMessage = shortImpactMessage(task, currentUser)
   const isFocus = variant === 'focus'
   const clarity = meaningfulClarity(task)
 
-  function handleCardClick() {
-    if (isFocus && status === TASK_STATUS.NOT_STARTED) {
-      onAction?.('start', task, { source: 'focus' })
-      return
-    }
-    if (!interactive) return
-    onOpen(task.id)
-  }
+  const isStuck = (task.snoozeCount ?? 0) >= 2 || shouldShowFrictionFix(task) || isOverdue(task)
 
   function stopAndRun(event, action) {
     event.stopPropagation()
     onAction(action, task)
   }
 
-  if (!isFocus) {
-    return (
-      <article
-        role={interactive ? 'button' : undefined}
-        tabIndex={interactive ? 0 : undefined}
-        className={clsx(
-          'ft-card-transition rounded-4xl border bg-white/95 p-4 shadow-sm transition',
-          interactive ? 'cursor-pointer hover:border-accent/40 hover:shadow-card focus:outline-none focus:ring-2 focus:ring-accent/30' : '',
-          highlight ? 'border-accent/40 shadow-card' : 'border-sand',
-          motionState === 'exit' ? 'ft-card-exit' : '',
-          motionState === 'pulse' ? 'ft-soft-success' : '',
-        )}
-        onClick={handleCardClick}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            handleCardClick()
-          }
-        }}
-      >
-        <div className="flex flex-col gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              {tags.map((tag) => (
-                <span key={tag.label} className={clsx('rounded-full px-3 py-1 text-xs font-semibold', pillClass(tag.tone))}>
-                  {tag.label}
-                </span>
-              ))}
-            </div>
-            <h3 className="mt-2.5 line-clamp-2 text-base font-semibold leading-snug text-ink">{task.title}</h3>
-            {impactMessage ? <p className="mt-1.5 line-clamp-1 text-sm text-slate-600">{impactMessage}</p> : null}
-          </div>
-
-          <div className="rounded-3xl bg-canvas px-3 py-2 text-xs font-medium text-slate-600">
-            <p>{formatDueContext(task)}</p>
-            {interactive ? (
-              <p className="mt-2 inline-flex items-center gap-1 text-accent">
-                Open <ChevronRight size={14} />
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </article>
-    )
-  }
-
-  const primaryAction = status === TASK_STATUS.IN_PROGRESS ? { label: 'Done', action: 'done', icon: Check } : { label: 'Start', action: 'start', icon: Play }
-  const secondaryActions = status === TASK_STATUS.IN_PROGRESS
-    ? [{ label: 'Snooze', action: 'snooze', icon: Clock3 }]
-    : [
-        { label: 'Done', action: 'done', icon: Check },
-        { label: 'Snooze', action: 'snooze', icon: Clock3 },
-      ]
+  if (!isFocus) return null
 
   return (
-    <article
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      className={clsx(
-        'ft-card-transition rounded-[2rem] border bg-white/95 p-5 shadow-card transition',
-        interactive ? 'cursor-pointer hover:border-accent/40 hover:shadow-card focus:outline-none focus:ring-2 focus:ring-accent/30 active:scale-[0.995]' : '',
-        highlight ? 'border-accent/50' : 'border-white/70',
-        motionState === 'exit' ? 'ft-card-exit' : '',
-        motionState === 'pulse' ? 'ft-soft-success' : '',
+    <div className="rounded-2xl border p-4 bg-white">
+      <h2 className="text-lg font-semibold">{task.title}</h2>
+      {impactMessage && <p className="text-sm text-gray-600">{impactMessage}</p>}
+
+      {clarity && (
+        <div className="mt-2 text-sm">
+          <div className="text-xs text-gray-500">Done when</div>
+          <div>{clarity}</div>
+        </div>
       )}
-      onClick={handleCardClick}
-      onKeyDown={(event) => {
-        if (!interactive) return
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          handleCardClick()
-        }
-      }}
-    >
-      <div className="flex flex-col gap-3">
-        <div className="space-y-2">
-          {focusBadge ? (
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-accent">{focusBadge}</p>
-          ) : null}
-          {task._surfaceReason ? (
-            <p className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent">{task._surfaceReason}</p>
-          ) : null}
-          <h2 className="text-[1.8rem] font-semibold leading-tight text-ink">{task.title}</h2>
-          {impactMessage ? <p className="text-sm leading-6 text-slate-600">{impactMessage}</p> : null}
-          {task.dueTime || task.dueDate ? <p className="text-sm font-medium text-slate-500">{formatDueContext(task)}</p> : null}
-        </div>
 
-        {referenceTitle ? (
-          <div className="rounded-3xl bg-canvas px-4 py-3 text-sm text-slate-700">
-            <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Original task</p>
-            <p>{referenceTitle}</p>
+      {isStuck && (
+        <div className="mt-3 p-3 bg-amber-50 rounded-xl">
+          <div className="text-sm font-medium mb-2">This hasn’t moved. Fix it?</div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={(e)=>stopAndRun(e,'break')} className="px-3 py-2 border rounded">Break it down</button>
+            <button onClick={(e)=>stopAndRun(e,'reschedule')} className="px-3 py-2 border rounded">Change timing</button>
+            <button onClick={(e)=>stopAndRun(e,'reassign')} className="px-3 py-2 border rounded">Reassign</button>
+            <button onClick={(e)=>stopAndRun(e,'remove')} className="px-3 py-2 border rounded text-red-600">Drop it</button>
           </div>
-        ) : null}
-
-        {whyDecision.text ? (
-          <p className="text-sm text-slate-600">{whyDecision.text}</p>
-        ) : null}
-
-        {clarity ? (
-          <div className="rounded-3xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Done when</p>
-            <p>{clarity}</p>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="mt-4 flex flex-col gap-2">
-        <button
-          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-4 font-semibold text-white transition duration-150 active:scale-[0.98]"
-          type="button"
-          onClick={(event) => stopAndRun(event, primaryAction.action)}
-        >
-          <primaryAction.icon size={16} /> {primaryAction.label}
-        </button>
-
-        <div className="flex gap-2 flex-wrap">
-          {secondaryActions.map((item) => (
-            <button
-              key={item.action}
-              className="flex min-h-[44px] min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
-              type="button"
-              onClick={(event) => stopAndRun(event, item.action)}
-            >
-              <item.icon size={16} /> {item.label}
-            </button>
-          ))}
         </div>
+      )}
+
+      <div className="mt-4 flex gap-2">
+        <button onClick={(e)=>stopAndRun(e,'start')} className="flex-1 bg-blue-600 text-white py-2 rounded">Start</button>
+        <button onClick={(e)=>stopAndRun(e,'done')} className="flex-1 border py-2 rounded">Done</button>
       </div>
-    </article>
+    </div>
   )
 }
