@@ -622,14 +622,29 @@ export const dueSoonSweep = onSchedule(
     const windowEnd = now + 2 * 60 * 60 * 1000
     const tasksSnapshot = await db.collection('tasks').where('isCompleted', '==', false).get()
 
+    const usersSnapshot = await db.collection('users').get()
+    const allUserIds = usersSnapshot.docs.map((doc) => doc.id)
+
     await Promise.all(
       tasksSnapshot.docs.map(async (taskDoc) => {
         const task = taskDoc.data()
         const dueDate = task.dueDate?.toDate ? task.dueDate.toDate().getTime() : new Date(task.dueDate).getTime()
         if (Number.isNaN(dueDate) || dueDate < now || dueDate > windowEnd) return
-        await sendToUser(task.assignedTo, 'Follow Through', `${task.title} needs attention`, {
-          taskId: taskDoc.id,
-          kind: 'due-soon',
+
+        const lastNotified = task.dueSoonNotifiedAt?.toDate?.()?.getTime() ?? null
+        if (lastNotified && now - lastNotified < cooldownMs) return
+
+        const targetIds = task.assignedTo === 'both' ? allUserIds : [task.assignedTo]
+        await Promise.all(
+          targetIds.map((uid) =>
+            sendToUser(uid, 'Follow Through', `${task.title} needs attention`, {
+              taskId: taskDoc.id,
+              kind: 'due-soon',
+            }),
+          ),
+        )
+        await db.collection('tasks').doc(taskDoc.id).update({
+          dueSoonNotifiedAt: admin.firestore.FieldValue.serverTimestamp(),
         })
       }),
     )
