@@ -9,6 +9,7 @@ import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from '.
 import { PageHeader } from './PageHeader'
 
 const SEGMENTS = [
+  { id: 'top1', label: 'Top 1' },
   { id: 'all', label: 'All' },
   { id: 'today', label: 'Today' },
   { id: 'upcoming', label: 'Upcoming' },
@@ -129,8 +130,9 @@ export function TasksPage({
   const displayTasks = useMemo(() => {
     if (quickActionMode === 'top3') return allVisibleTasks.slice(0, 3)
     if (quickActionMode === 'simplify') return allVisibleTasks.slice(0, 1)
+    if (activeSegment === 'top1') return allVisibleTasks.slice(0, 1)
     return visibleTasks
-  }, [allVisibleTasks, quickActionMode, visibleTasks])
+  }, [activeSegment, allVisibleTasks, quickActionMode, visibleTasks])
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
@@ -223,11 +225,11 @@ export function TasksPage({
             ) : null}
           </div>
 
-          <div className="grid grid-cols-5 gap-1 rounded-3xl bg-white p-1 shadow-sm">
+          <div className="grid grid-cols-3 gap-1 rounded-3xl bg-white p-1 shadow-sm">
             {SEGMENTS.map((segment) => (
               <button
                 key={segment.id}
-                className={`rounded-2xl px-2 py-3 text-xs font-semibold transition ${activeSegment === segment.id ? 'bg-accent text-white' : 'text-slate-600'}`}
+                className={`rounded-2xl px-2 py-3 text-xs font-semibold transition duration-150 active:opacity-75 ${activeSegment === segment.id ? 'bg-accent text-white' : 'text-slate-600'}`}
                 type="button"
                 onClick={() => setActiveSegment(segment.id)}
               >

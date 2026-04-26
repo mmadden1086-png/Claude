@@ -1,12 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { TASK_STATUS } from '../lib/constants'
-import { getTaskStatus } from '../lib/format'
 import { TaskCard } from '../components/TaskCard'
 
 export function FocusPage({
   sections,
   currentUser,
-  filteredTasks,
   focusGoalMessage,
   monthlyDateStatus,
   accountabilityBanner,
@@ -36,12 +33,6 @@ export function FocusPage({
 
   function handlePrimaryOpen(taskId) {
     const resolvedId = focusTask?.isBrokenDown ? focusTask.parentTaskId : taskId
-    const task = filteredTasks.find((item) => item.id === resolvedId)
-    if (!task) return
-    if (getTaskStatus(task) === TASK_STATUS.NOT_STARTED) {
-      onTaskAction('start', task, { source: 'focus' })
-      return
-    }
     onOpenTask(resolvedId)
   }
 
