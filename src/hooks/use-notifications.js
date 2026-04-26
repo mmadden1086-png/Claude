@@ -179,10 +179,15 @@ export function useNotifications(userId) {
       const messaging = await getMessagingIfSupported()
       if (!messaging) return
 
-      unsubscribe = onMessage(messaging, (payload) => {
+      unsubscribe = onMessage(messaging, async (payload) => {
         const title = payload.notification?.title ?? 'Follow Through'
         const body = payload.notification?.body ?? 'A task needs attention.'
-        new Notification(title, { body })
+        try {
+          const registration = await navigator.serviceWorker.ready
+          registration.showNotification(title, { body, icon: '/favicon.svg' })
+        } catch {
+          new Notification(title, { body })
+        }
       })
     }
 
@@ -248,9 +253,15 @@ export function useNotifications(userId) {
       window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
       window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, 'true')
 
-      new Notification('Follow Through notifications enabled', {
-        body: 'You will get a heads-up when something needs attention.',
-      })
+      try {
+        const registration = await navigator.serviceWorker.ready
+        await registration.showNotification('Follow Through notifications enabled', {
+          body: 'You will get a heads-up when something needs attention.',
+          icon: '/favicon.svg',
+        })
+      } catch {
+        // ignore — FCM test notification from registerPushToken will still arrive
+      }
 
       setStatus('enabled')
       return { status: 'enabled', message: 'Notifications enabled.' }
