@@ -46,11 +46,25 @@ function createFormState(task) {
   }
 }
 
-export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose, onSave, onDelete, onAction, onQuickAdd }) {
+function formatCommentTime(createdAt) {
+  const date = new Date(createdAt)
+  if (Number.isNaN(date.getTime())) return ''
+  const diffMs = Date.now() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  return date.toLocaleDateString()
+}
+
+export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose, onSave, onDelete, onAction, onQuickAdd, onAddComment }) {
   const [form, setForm] = useState(() => createFormState(task))
   const [isEditing, setIsEditing] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [commentText, setCommentText] = useState('')
+  const [commentBusy, setCommentBusy] = useState(false)
   const [isSuggestionLoading, setIsSuggestionLoading] = useState(false)
   const [doneIsSuggested, setDoneIsSuggested] = useState(false)
   const [whyTouched, setWhyTouched] = useState(Boolean(task.whyThisMatters?.trim()))
@@ -262,6 +276,18 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
   const taskAge = formatTaskAge(task)
   const taskStatus = getTaskStatus(task)
 
+  async function handleAddCommentSubmit() {
+    const text = commentText.trim()
+    if (!text || commentBusy) return
+    setCommentBusy(true)
+    try {
+      await onAddComment?.(text)
+      setCommentText('')
+    } finally {
+      setCommentBusy(false)
+    }
+  }
+
   function handleReadAction(action) {
     onAction?.(action, task)
     onClose?.()
@@ -395,6 +421,37 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
                   <p className="mt-2 text-sm text-ink">{taskAge}</p>
                 </div>
               ) : null}
+            </div>
+
+            <div className="rounded-3xl bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Thread</p>
+              {(task.comments ?? []).length ? (
+                <div className="mt-3 space-y-3">
+                  {(task.comments ?? []).map((comment) => (
+                    <div key={comment.id} className="rounded-2xl bg-canvas px-3 py-2">
+                      <p className="text-xs font-medium text-slate-500">{comment.authorName ?? 'You'} · {formatCommentTime(comment.createdAt)}</p>
+                      <p className="mt-1 text-sm text-ink">{comment.text}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="mt-3 flex gap-2">
+                <input
+                  className="flex-1 rounded-2xl border border-slate-200 bg-canvas px-3 py-2 text-sm placeholder:text-slate-400"
+                  placeholder="Add a note…"
+                  value={commentText}
+                  onChange={(event) => setCommentText(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void handleAddCommentSubmit() } }}
+                />
+                <button
+                  className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-white transition duration-150 active:scale-[0.98] disabled:opacity-40"
+                  type="button"
+                  disabled={!commentText.trim() || commentBusy}
+                  onClick={handleAddCommentSubmit}
+                >
+                  Add
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-3">

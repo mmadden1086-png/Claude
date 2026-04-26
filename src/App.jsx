@@ -14,7 +14,7 @@ import { TaskDetailModal } from './components/TaskDetailModal'
 import { TimeSelect } from './components/TimeSelect'
 import { ToastStack } from './components/ToastStack'
 import { AppShell } from './layout/AppShell'
-import { ACTION_SNOOZE_OPTIONS, BOTH_ASSIGNEE_ID, DEFAULT_USER_GOALS, RESCHEDULE_OPTIONS, SNOOZE_OPTIONS, TASK_STATUS, USERS, getCanonicalUserName } from './lib/constants'
+import { ACTION_SNOOZE_OPTIONS, BOTH_ASSIGNEE_ID, DEFAULT_USER_GOALS, RESCHEDULE_OPTIONS, TASK_STATUS, USERS, getCanonicalUserName } from './lib/constants'
 import {
   buildDateTask,
   createDateIdeaPayload,
@@ -31,12 +31,15 @@ import {
 } from './lib/date-night'
 import { getTaskStatus, resolveRescheduleDate, resolveSnoozeUntil, toDate } from './lib/format'
 import { logout } from './lib/firestore'
+import { functions } from './lib/firebase'
+import { httpsCallable } from 'firebase/functions'
 import { useAuthSession } from './hooks/use-auth'
 import { useNotifications } from './hooks/use-notifications'
 import { useSharedData } from './hooks/use-shared-data'
-import { appendHistory, computeStats, createTaskPayload, deriveSections, getBannerMessage, getPointsForTask, sortTasks } from './lib/task-utils'
+import { appendHistory, computeStats, createTaskPayload, deriveSections, getPointsForTask, sortTasks } from './lib/task-utils'
 import { getAccountabilitySignals, getDailyAccountabilityMessage } from './lib/accountability'
 import { dismissCheckInForToday, getCheckInState, isCheckInDismissedForToday } from './lib/check-in'
+import { buildWeeklyCheckInReview } from './lib/check-in-review'
 import { detectDuplicateTask, getSmartRetryDate } from './lib/task-decision'
 import { selectTaskViews } from './lib/selection'
 import { advanceRepeatingTask, shouldAdvanceRepeat } from './lib/task-state'
@@ -302,14 +305,17 @@ function App() {
   const monthlyDateStatus = useMemo(() => getMonthlyDateStatus(tasks, dateHistory), [dateHistory, tasks])
   const dateNightSummary = useMemo(() => dateNightActivitySummary(dateHistory), [dateHistory])
   const topDateIdeas = useMemo(() => topRatedDateIdeas(dateIdeas, dateHistory), [dateHistory, dateIdeas])
+  const checkInReview = useMemo(
+    () => currentUser ? buildWeeklyCheckInReview({ tasks: tasks ?? [], currentUserId: currentUser.id, partnerId: partner?.id }) : null,
+    [tasks, currentUser, partner],
+  )
   const checkInState = useMemo(
     () => getCheckInState(currentUser?.checkIn ?? { lastCompletedAt: currentUser?.lastCheckInAt ?? null }),
     [currentUser],
   )
   const checkInBannerDismissed = checkInDismissTick >= 0 && isCheckInDismissedForToday(checkInState)
   const checkInBanner = checkInState?.status && checkInState.status !== 'recent' && !checkInBannerDismissed ? checkInState : null
-  const banner = getBannerMessage(sections?.topTask, stats)
-  const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
+const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
   const openTask = tasks.find((task) => task.id === openTaskId) ?? null
   const activeDateReminderPrompt = dateReminderPrompt ? tasks.find((task) => task.id === dateReminderPrompt.id) ?? null : null
   const activeDateMorningPrompt = dateMorningPrompt ? tasks.find((task) => task.id === dateMorningPrompt.id) ?? null : null
@@ -755,6 +761,20 @@ function App() {
       if (typeof window !== 'undefined' && typeof window.alert === 'function') {
         window.alert(message)
       }
+    }
+  }
+
+  async function handleSendTestNotification() {
+    if (!functions) {
+      addToast('Firebase is not connected', null)
+      return
+    }
+    addToast('Sending test notification…', null)
+    try {
+      await httpsCallable(functions, 'sendTestNotification')()
+      addToast('Test sent — check your notification shade', null)
+    } catch (error) {
+      addToast(error?.message ?? 'Test notification failed', null)
     }
   }
 
@@ -1215,6 +1235,21 @@ function App() {
     addToast('Missed tasks moved to tomorrow', null)
   }
 
+  async function handleAddComment(taskId, text) {
+    const task = tasks.find((item) => item.id === taskId)
+    if (!task || !currentUser) return
+    const comment = {
+      id: crypto.randomUUID(),
+      text,
+      authorId: currentUser.id,
+      authorName: currentUser.name,
+      createdAt: new Date().toISOString(),
+    }
+    await actions.updateTask(taskId, {
+      comments: [...(task.comments ?? []), comment],
+    })
+  }
+
   async function handleTaskSave(taskId, updates) {
     if (!currentUser) return undefined
     const task = tasks.find((item) => item.id === taskId)
@@ -1372,7 +1407,6 @@ function App() {
   const pageProps = {
     error,
     usingMockData,
-    banner,
     stats,
     goals,
     goalProgress,
@@ -1404,11 +1438,9 @@ function App() {
     quickAddExpanded,
     quickAddDefaults,
     setQuickAddExpanded: updateQuickAddExpanded,
-    snoozePreset,
-    setSnoozePreset,
-    snoozeOptions: SNOOZE_OPTIONS,
     notificationStatus,
     onEnableNotifications: handleEnableNotifications,
+    onSendTestNotification: handleSendTestNotification,
     onOpenGoalEditor: (goalKey) => setGoalEditor({ key: goalKey }),
     onOpenDateIdeaModal: () => { setEditingDateIdea(null); setDateIdeaModalOpen(true) },
     onOpenDateNight: () => navigate('/dates'),
@@ -1428,13 +1460,12 @@ function App() {
     taskMotionState: getTaskMotionState,
     onStatsDrilldown: setStatsView,
     onKeepTopThree: handleKeepTopThree,
-    onSimplifyList: handleSimplifyList,
     onWeeklyReassign: handleWeeklyReassign,
     onCheckInComplete: handleCheckInComplete,
     onPlanCheckIn: handlePlanCheckIn,
     onViewCheckInDetails: handleViewCheckInDetails,
     onDismissCheckInBanner: handleDismissCheckInBanner,
-    checkInPrepOpenToken,
+    checkInReview,
     onConvertToRepeat: handleConvertToRepeat,
     onClearToday: handleClearToday,
     onWrapUpTomorrow: handleWrapUpTomorrow,
@@ -1483,6 +1514,7 @@ function App() {
           onSave={(updates) => handleTaskSave(openTask.id, updates)}
           onDelete={({ scope } = {}) => handleDeleteTask(openTask, scope ?? 'single')}
           onQuickAdd={handleQuickAdd}
+          onAddComment={(text) => handleAddComment(openTask.id, text)}
         />
       ) : null}
 
@@ -1490,6 +1522,9 @@ function App() {
         <ActionSheetModal
           title={actionSheet.type === 'snooze' ? 'Snooze task' : 'Reschedule task'}
           options={actionSheet.type === 'snooze' ? ACTION_SNOOZE_OPTIONS : RESCHEDULE_OPTIONS}
+          nudge={actionSheet.type === 'snooze' && (actionSheet.task?.snoozeCount ?? 0) >= 2
+            ? `You've pushed this ${actionSheet.task.snoozeCount} time${actionSheet.task.snoozeCount === 1 ? '' : 's'}. Is it still real?`
+            : null}
           customDate={customDate}
           customLabel={actionSheet.type === 'snooze' ? 'Custom snooze date' : 'Custom due date'}
           onCustomDateChange={setCustomDate}

@@ -11,6 +11,7 @@ export function MenuPage({
   setLowEnergyMode,
   notificationStatus,
   onEnableNotifications,
+  onSendTestNotification,
   onStartHere,
   goals,
   goalSuggestion,
@@ -98,6 +99,15 @@ export function MenuPage({
               </button>
               {errorNote ? (
                 <p className="px-1 text-xs text-rose-600">{errorNote}</p>
+              ) : null}
+              {notificationStatus === 'enabled' ? (
+                <button
+                  className="w-full rounded-3xl bg-white px-4 py-3 text-left text-sm font-medium text-slate-600 transition duration-150 active:scale-[0.98]"
+                  type="button"
+                  onClick={onSendTestNotification}
+                >
+                  Send test notification
+                </button>
               ) : null}
             </>
           )

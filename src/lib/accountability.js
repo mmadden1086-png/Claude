@@ -128,7 +128,7 @@ export async function getDailyAccountabilityMessage(signal, now = new Date()) {
 
   const today = dayKey(now)
   const stored = readStoredBanner()
-  if (stored?.date === today && stored?.message) {
+  if (stored?.date === today && stored?.type === signal.type && stored?.message) {
     return stored.message
   }
 

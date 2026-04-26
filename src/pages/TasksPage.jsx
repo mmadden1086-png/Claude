@@ -70,6 +70,8 @@ export function TasksPage({
   taskMotionState,
   onWeeklyReassign,
 }) {
+  const focusTask = selection?.focusTask ?? sections?.focusTask ?? null
+
   const [activeSegment, setActiveSegment] = useState('all')
   const [quickActionMode, setQuickActionMode] = useState('normal')
   const [utilitiesOpen, setUtilitiesOpen] = useState(() => {
@@ -82,11 +84,14 @@ export function TasksPage({
   })
   const [searchQuery, setSearchQuery] = useState('')
   const [isSubmittingInline, setIsSubmittingInline] = useState(false)
+
   const allSorted = useMemo(() => selection?.allSorted ?? [], [selection])
+
   const snoozedTasks = useMemo(
     () => filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && isSnoozed(task)),
     [filteredTasks],
   )
+
   const groupedTasks = useMemo(() => {
     const today = allSorted.filter(isTodayBucketTask)
     const upcoming = allSorted.filter((task) => !today.some((candidate) => candidate.id === task.id) && dueWithinDays(task, 7))
@@ -100,33 +105,45 @@ export function TasksPage({
       snoozed: snoozedTasks,
     }
   }, [allSorted, snoozedTasks])
+
   const upcomingTasks = useMemo(() => selection?.upcoming ?? sections?.dueSoonTasks ?? [], [sections, selection])
+
   const allVisibleTasks = useMemo(
     () => (groupedTasks.all ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
     [groupedTasks.all, searchQuery],
   )
+
   const visibleTasks = useMemo(
     () => (groupedTasks[activeSegment] ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
     [activeSegment, groupedTasks, searchQuery],
   )
+
   const visibleUpcomingTasks = useMemo(
     () => upcomingTasks.filter((task) => matchesTaskSearch(task, searchQuery)),
     [searchQuery, upcomingTasks],
   )
+
   const visibleDraggingTasks = useMemo(
     () => (selection?.checkIn ?? selection?.dragging ?? sections?.draggingTasks ?? []).filter((task) => matchesTaskSearch(task, searchQuery)),
     [searchQuery, sections?.draggingTasks, selection],
   )
+
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
   const totalOpenCount = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
+
   const filterLabel = FILTERS.find((filter) => filter.id === filterId)?.label ?? 'current'
   const noFilterMatches = !searchQuery && filterId !== 'all' && allSorted.length === 0 && totalOpenCount > 0
+
   const draggingCount = visibleDraggingTasks.length
+
   const shouldAutoExpandUtilities = draggingCount > 0 || filteredTasks.some((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED)
+
   const utilitiesVisible = utilitiesOpen || (shouldAutoExpandUtilities && !utilitiesDismissed)
+
   const utilitiesSummaryLabel = draggingCount > 0
     ? `${draggingCount} need attention`
     : `${visibleUpcomingTasks.length} coming up`
+
   const displayTasks = useMemo(() => {
     if (quickActionMode === 'top3') return allVisibleTasks.slice(0, 3)
     if (quickActionMode === 'simplify') return allVisibleTasks.slice(0, 1)
@@ -178,6 +195,25 @@ export function TasksPage({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="space-y-4">
+
+          {focusTask && (
+            <div className="mb-2">
+              <div className="text-xs text-slate-500 mb-1">
+                What needs attention
+              </div>
+              <TaskCard
+                task={focusTask}
+                currentUser={currentUser}
+                usersById={usersById}
+                onAction={onTaskAction}
+                onOpen={onOpenTask}
+                variant="focus"
+                showWhy
+                showDoneWhen
+              />
+            </div>
+          )}
+
           <PageHeader
             title="Tasks"
             body="Browse everything or jump into one bucket."
@@ -353,78 +389,13 @@ export function TasksPage({
               ))
             ) : (
               <div className="rounded-[1.75rem] border border-white/70 bg-panel/95 p-4 text-sm text-slate-500 shadow-card">
-                <p>
-                  {noFilterMatches
-                    ? `No tasks match ${filterLabel} filter.`
-                    : searchQuery
-                      ? 'No matching tasks.'
-                      : quickActionMode !== 'normal'
-                        ? 'No tasks match this quick action view.'
-                        : `Nothing in ${SEGMENTS.find((segment) => segment.id === activeSegment)?.label.toLowerCase()} right now.`}
-                </p>
-                {noFilterMatches ? (
-                  <button
-                    className="mt-3 text-sm font-semibold text-accent underline-offset-4 transition hover:underline"
-                    type="button"
-                    onClick={() => setFilterId('all')}
-                  >
-                    Clear filter
-                  </button>
-                ) : null}
-                {quickActionMode !== 'normal' ? (
-                  <button
-                    className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition duration-150 active:scale-[0.98]"
-                    type="button"
-                    onClick={() => setQuickActionMode('normal')}
-                  >
-                    Return to normal view
-                  </button>
-                ) : null}
-                <button
-                  className="mt-3 w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
-                  type="button"
-                  onClick={() => setQuickAddExpanded(true)}
-                >
-                  Add a task
-                </button>
+                <p>No tasks right now.</p>
               </div>
             )}
           </section>
+
         </div>
       </div>
-
-      {quickAddExpanded ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/30 px-4 py-4 backdrop-blur-sm">
-          <div className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-4xl bg-canvas shadow-card">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-canvas px-4 py-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-accent">Quick Add</p>
-                <h2 className="text-lg font-semibold text-ink">Capture a task</h2>
-              </div>
-              <button
-                className="rounded-full bg-white p-3 text-slate-600 transition duration-150 active:scale-[0.98]"
-                type="button"
-                aria-label="Close quick add"
-                onClick={() => setQuickAddExpanded(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3 pt-0">
-              <QuickAddCard
-                key={`${currentUser.id}:${JSON.stringify(quickAddDefaults ?? {})}`}
-                currentUser={currentUser}
-                users={users}
-                tasks={tasks}
-                defaults={quickAddDefaults}
-                onSubmit={onQuickAdd}
-                expanded
-                onExpandedChange={setQuickAddExpanded}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }
