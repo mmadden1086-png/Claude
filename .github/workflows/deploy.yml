@@ -44,7 +44,7 @@ jobs:
           VITE_FIREBASE_APP_ID: 1:153740630717:web:46e7580b3c75564c74b5d4
           VITE_FIREBASE_VAPID_KEY: BKcA9wTnmZpqfX9xJ35D1k-NDcmLkXWQV3X6mGFF4vc1RVhnyrymKgPFnSgsNBpRThZag-CIL4XtyFcSfN-xzvE
 
-      - name: Clean up removed Firebase functions
+      - name: Delete removed Cloud Functions
         run: |
           npx firebase-tools functions:delete dailyCheck --region us-central1 --force --token "$FIREBASE_TOKEN" || true
           npx firebase-tools functions:delete onTaskCompleted --region us-central1 --force --token "$FIREBASE_TOKEN" || true
