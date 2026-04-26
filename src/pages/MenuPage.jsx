@@ -1,4 +1,4 @@
-import { Bell, Heart, MoonStar, SunMedium, Target, Zap } from 'lucide-react'
+import { Bell, Heart, MessageCircleHeart, MoonStar, SunMedium, Target, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from './PageHeader'
@@ -18,6 +18,7 @@ export function MenuPage({
   onOpenGoalEditor,
   onClearToday,
   onWrapUpTomorrow,
+  onThinkingOfYou,
   onSignOut,
 }) {
   const navigate = useNavigate()
@@ -133,6 +134,19 @@ export function MenuPage({
           <p className="mt-1 text-sm text-slate-600">{goals.reliabilityTarget}% on time</p>
         </button>
         {goalSuggestion ? <p className="px-1 text-sm text-slate-500">{goalSuggestion}</p> : null}
+      </SectionCard>
+
+      <SectionCard title="Connection" subtitle="Small gestures keep the relationship warm.">
+        <button
+          className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
+          type="button"
+          onClick={onThinkingOfYou}
+        >
+          <span className="inline-flex items-center gap-2">
+            <MessageCircleHeart size={16} /> Send "thinking of you"
+          </span>
+        </button>
+        <p className="px-1 text-xs text-slate-500">Sends a warm push notification to your partner. One tap, no typing required.</p>
       </SectionCard>
 
       <SectionCard title="Date Night" subtitle="Keep date ideas and date history in one dedicated place.">

@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Clock3, Play } from 'lucide-react'
+import { Check, ChevronRight, Clock3, Play, Shield } from 'lucide-react'
 import { clsx } from 'clsx'
 import { TASK_STATUS } from '../lib/constants'
 import { formatDueContext, getTaskStatus, isDueWithinHours, isOverdue, isSnoozed } from '../lib/format'
@@ -109,6 +109,11 @@ export function TaskCard({
         <div className="flex flex-col gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
+              {task.protected ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
+                  <Shield size={10} /> Self-care
+                </span>
+              ) : null}
               {tags.map((tag) => (
                 <span key={tag.label} className={clsx('rounded-full px-3 py-1 text-xs font-semibold', pillClass(tag.tone))}>
                   {tag.label}

@@ -9,6 +9,7 @@ import { PageHeader } from './PageHeader'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'fairness', label: 'Balance' },
   { id: 'history', label: 'History' },
 ]
 
@@ -72,6 +73,25 @@ export function ActivityPage({
     () => filteredTasks.filter((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED).slice(0, 4),
     [filteredTasks],
   )
+
+  const fairnessData = useMemo(() => {
+    const completed = tasks.filter((task) => getTaskStatus(task) === TASK_STATUS.COMPLETED)
+    const myCount = completed.filter((t) => t.assignedTo === currentUser.id).length
+    const partnerCount = completed.filter((t) => t.assignedTo === partner?.id).length
+    const total = myCount + partnerCount || 1
+    const myPercent = Math.round((myCount / total) * 100)
+    const partnerPercent = 100 - myPercent
+
+    const CATEGORIES = ['Home', 'Health', 'Finance', 'Admin', 'Kids', 'Relationship', 'Work', 'Personal']
+    const byCategory = CATEGORIES.map((cat) => {
+      const catTasks = completed.filter((t) => t.category === cat)
+      const mine = catTasks.filter((t) => t.assignedTo === currentUser.id).length
+      const theirs = catTasks.filter((t) => t.assignedTo === partner?.id).length
+      return { cat, mine, theirs, total: mine + theirs }
+    }).filter((row) => row.total > 0)
+
+    return { myCount, partnerCount, myPercent, partnerPercent, byCategory }
+  }, [tasks, currentUser.id, partner?.id])
   function handleDrilldown(view) {
     if (view?.type === 'open') {
       navigate('/tasks')
@@ -198,6 +218,81 @@ export function ActivityPage({
                     ) : null}
                   </button>
                 </div>
+              </SectionCard>
+            </>
+          ) : null}
+
+          {/* ── Balance tab ───────────────────────────────────────────────── */}
+          {activeTab === 'fairness' ? (
+            <>
+              <SectionCard title="Household load" subtitle="Who's been carrying what, based on completed tasks.">
+                <div className="space-y-3">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-medium text-ink">{currentUser.name}</span>
+                      <span className="text-slate-500">{fairnessData.myCount} tasks ({fairnessData.myPercent}%)</span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-canvas">
+                      <div className="h-2.5 rounded-full bg-accent transition-all duration-500" style={{ width: `${fairnessData.myPercent}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-medium text-ink">{partner?.name ?? 'Partner'}</span>
+                      <span className="text-slate-500">{fairnessData.partnerCount} tasks ({fairnessData.partnerPercent}%)</span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-canvas">
+                      <div className="h-2.5 rounded-full bg-gold transition-all duration-500" style={{ width: `${fairnessData.partnerPercent}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                {fairnessData.byCategory.length ? (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">By category</p>
+                    {fairnessData.byCategory.map(({ cat, mine, theirs, total }) => {
+                      const myPct = Math.round((mine / total) * 100)
+                      return (
+                        <div key={cat} className="rounded-2xl bg-canvas px-3 py-2">
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <span className="font-medium text-ink">{cat}</span>
+                            <span className="text-slate-500">{mine} / {theirs}</span>
+                          </div>
+                          <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-white">
+                            <div className="h-1.5 bg-accent transition-all duration-500" style={{ width: `${myPct}%` }} />
+                            <div className="h-1.5 bg-gold transition-all duration-500" style={{ width: `${100 - myPct}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                    <p className="px-1 text-xs text-slate-400">
+                      <span className="inline-block h-2 w-2 rounded-full bg-accent" /> {currentUser.name}
+                      &nbsp;&nbsp;<span className="inline-block h-2 w-2 rounded-full bg-gold" /> {partner?.name ?? 'Partner'}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No completed tasks to compare yet.</p>
+                )}
+              </SectionCard>
+
+              <SectionCard title="Open tasks" subtitle="What's still in each person's queue.">
+                {(() => {
+                  const open = tasks.filter((t) => getTaskStatus(t) !== TASK_STATUS.COMPLETED && !t.isMissed)
+                  const myOpen = open.filter((t) => t.assignedTo === currentUser.id).length
+                  const partnerOpen = open.filter((t) => t.assignedTo === partner?.id).length
+                  return (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-3xl bg-canvas p-4">
+                        <p className="text-2xl font-semibold text-accent">{myOpen}</p>
+                        <p className="mt-1 text-xs text-slate-600">{currentUser.name}'s open tasks</p>
+                      </div>
+                      <div className="rounded-3xl bg-canvas p-4">
+                        <p className="text-2xl font-semibold text-gold">{partnerOpen}</p>
+                        <p className="mt-1 text-xs text-slate-600">{partner?.name ?? 'Partner'}'s open tasks</p>
+                      </div>
+                    </div>
+                  )
+                })()}
               </SectionCard>
             </>
           ) : null}

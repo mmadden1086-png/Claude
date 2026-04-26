@@ -3,6 +3,7 @@ import { TimerReset } from 'lucide-react'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ActionSheetModal } from './components/ActionSheetModal'
+import { SharedGoalModal } from './components/SharedGoalModal'
 import { ConfirmModal } from './components/ConfirmModal'
 import { DateCompletionModal } from './components/DateCompletionModal'
 import { DateIdeaModal } from './components/DateIdeaModal'
@@ -88,9 +89,14 @@ function findCurrentUser(sessionUser, users) {
     totalPoints: existing?.totalPoints ?? 0,
     weeklyPoints: existing?.weeklyPoints ?? 0,
     lastCheckInAt: existing?.lastCheckInAt ?? null,
+    moodLevel: existing?.moodLevel ?? null,
+    moodUpdatedAt: existing?.moodUpdatedAt ?? null,
+    dialogueAnswer: existing?.dialogueAnswer ?? '',
+    dialogueDateKey: existing?.dialogueDateKey ?? '',
     checkIn: {
       lastCompletedAt: existing?.checkIn?.lastCompletedAt ?? existing?.lastCheckInAt ?? null,
       nextPlannedAt: existing?.checkIn?.nextPlannedAt ?? null,
+      lastAppreciation: existing?.checkIn?.lastAppreciation ?? '',
     },
     goals,
   }
@@ -220,7 +226,7 @@ function getRelatedFutureRepeats(task, tasks) {
 function App() {
   const navigate = useNavigate()
   const { sessionUser, loading: authLoading, usingMockAuth } = useAuthSession()
-  const { users, tasks, dateIdeas, dateHistory, loading, error, actions, usingMockData } = useSharedData(sessionUser)
+  const { users, tasks, dateIdeas, dateHistory, sharedGoal, loading, error, actions, usingMockData } = useSharedData(sessionUser)
   const currentUser = findCurrentUser(sessionUser, users)
   const partner = findPartner(currentUser, users)
   const usersById = useMemo(() => Object.fromEntries(users.map((user) => [user.id, user])), [users])
@@ -271,6 +277,9 @@ function App() {
   const [checkInDismissTick, setCheckInDismissTick] = useState(0)
   const [checkInPrepOpenToken, setCheckInPrepOpenToken] = useState(0)
   const [accountabilityBanner, setAccountabilityBanner] = useState('')
+  const [sharedGoalModalOpen, setSharedGoalModalOpen] = useState(false)
+  const [sharedGoalBusy, setSharedGoalBusy] = useState(false)
+  const [protectedSnoozeTask, setProtectedSnoozeTask] = useState(null)
   const [selectedDateDueDate, setSelectedDateDueDate] = useState(() => toDateInputValue())
   const [taskMotion, setTaskMotion] = useState({})
   const actionLocks = useRef(new Set())
@@ -601,7 +610,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     setSelectedDateDueDate(toDateInputValue())
   }
 
-  async function handleCheckInComplete() {
+  async function handleCheckInComplete(appreciation = '') {
     if (!currentUser) return
     const now = new Date().toISOString()
     await actions.updateUserProfile({
@@ -611,10 +620,56 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
         ...(currentUser.checkIn ?? {}),
         lastCompletedAt: now,
         nextPlannedAt: null,
+        lastAppreciation: appreciation || currentUser.checkIn?.lastAppreciation || '',
       },
     })
     addToast('Check-in marked complete', null)
     setCheckInConversationPrompt(true)
+  }
+
+  async function handleSaveDialogueAnswer({ answer, dateKey }) {
+    if (!currentUser) return
+    await actions.updateUserProfile({
+      id: currentUser.id,
+      dialogueAnswer: answer,
+      dialogueDateKey: dateKey,
+    })
+  }
+
+  async function handleSetMoodLevel(level) {
+    if (!currentUser) return
+    await actions.updateUserProfile({
+      id: currentUser.id,
+      moodLevel: level,
+      moodUpdatedAt: new Date().toISOString(),
+    })
+  }
+
+  async function handleSaveSharedGoal(updates) {
+    setSharedGoalBusy(true)
+    try {
+      await actions.upsertSharedGoal(updates)
+      setSharedGoalModalOpen(false)
+      addToast('Goal saved', null)
+    } catch {
+      addToast('Could not save goal', null)
+    } finally {
+      setSharedGoalBusy(false)
+    }
+  }
+
+  async function handleThinkingOfYou() {
+    if (!functions) {
+      addToast('Firebase is not connected', null)
+      return
+    }
+    addToast('Sending…', null)
+    try {
+      await httpsCallable(functions, 'sendThinkingOfYou')()
+      addToast('Sent to your partner', null)
+    } catch (error) {
+      addToast(error?.message ?? 'Could not send', null)
+    }
   }
 
   function maybePromptDateNight() {
@@ -934,6 +989,10 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     }
 
     if (action === 'reschedule' || action === 'snooze') {
+      if (action === 'snooze' && sourceTask.protected && !options.bypassProtected) {
+        setProtectedSnoozeTask({ task: sourceTask, snapshot })
+        return
+      }
       setActionSheet({ type: action, task: sourceTask, snapshot })
       setCustomDate('')
       return
@@ -1470,6 +1529,11 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     onClearToday: handleClearToday,
     onWrapUpTomorrow: handleWrapUpTomorrow,
     onSignOut: logout,
+    onSetMoodLevel: handleSetMoodLevel,
+    onSaveDialogueAnswer: handleSaveDialogueAnswer,
+    sharedGoal,
+    onEditSharedGoal: () => setSharedGoalModalOpen(true),
+    onThinkingOfYou: handleThinkingOfYou,
   }
 
   return (
@@ -1767,6 +1831,36 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
             },
           ]}
           onCancel={() => setCheckInDatePrompt(false)}
+        />
+      ) : null}
+
+      {protectedSnoozeTask ? (
+        <ConfirmModal
+          title="This is a protected self-care task"
+          body="Snoozing self-care keeps adding to your stress load. Are you sure you want to push this?"
+          actions={[
+            { label: 'Keep it', onClick: () => setProtectedSnoozeTask(null), tone: 'primary' },
+            {
+              label: 'Snooze anyway',
+              onClick: () => {
+                const { task, snapshot } = protectedSnoozeTask
+                setProtectedSnoozeTask(null)
+                setActionSheet({ type: 'snooze', task, snapshot })
+                setCustomDate('')
+              },
+              tone: 'default',
+            },
+          ]}
+          onCancel={() => setProtectedSnoozeTask(null)}
+        />
+      ) : null}
+
+      {sharedGoalModalOpen ? (
+        <SharedGoalModal
+          goal={sharedGoal}
+          onClose={() => setSharedGoalModalOpen(false)}
+          onSave={handleSaveSharedGoal}
+          busy={sharedGoalBusy}
         />
       ) : null}
     </>

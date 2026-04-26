@@ -876,6 +876,45 @@ export const sendNotification = onCall({ region: 'us-central1' }, async (request
   }
 })
 
+const THINKING_OF_YOU_MESSAGES = [
+  'Thinking of you today ❤️',
+  'Just wanted you to know I appreciate you.',
+  'Hey — you matter to me. That's all.',
+  'Rooting for you today.',
+  'You're doing great. I see it.',
+  'Sending you a little love right now.',
+  'I'm glad we're in this together.',
+  'You've been on my mind. In a good way.',
+  'Today feels better knowing you're in it.',
+  'Just a reminder that I love you.',
+]
+
+export const sendThinkingOfYou = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'You must be signed in.')
+  }
+
+  const usersSnapshot = await db.collection('users').get()
+  const allUsers = usersSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const partner = allUsers.find((u) => u.id !== request.auth.uid)
+
+  if (!partner?.pushToken) {
+    throw new HttpsError('failed-precondition', 'Your partner does not have notifications enabled yet.')
+  }
+
+  const senderSnap = await db.collection('users').doc(request.auth.uid).get()
+  const senderName = senderSnap.data()?.name ?? 'Your partner'
+  const messageIndex = Math.floor(Math.random() * THINKING_OF_YOU_MESSAGES.length)
+  const message = THINKING_OF_YOU_MESSAGES[messageIndex]
+
+  try {
+    await sendToToken(partner.pushToken, senderName, message, { kind: 'thinking-of-you', sentBy: request.auth.uid })
+    return { ok: true }
+  } catch (error) {
+    throw new HttpsError('internal', error?.message ?? 'Could not send notification.')
+  }
+})
+
 // ── Adaptive notification system ─────────────────────────────────────────────
 
 const MESSAGE_POOLS = {

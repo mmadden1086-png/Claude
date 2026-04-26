@@ -10,10 +10,12 @@ import {
   restoreTask,
   subscribeToDateHistory,
   subscribeToDateIdeas,
+  subscribeToSharedGoal,
   subscribeToTasks,
   subscribeToUsers,
   updateDateIdea as updateDateIdeaDoc,
   updateTask as updateTaskDoc,
+  upsertSharedGoal as upsertSharedGoalDoc,
   upsertUserProfile,
 } from '../lib/firestore'
 import { TASK_STATUS } from '../lib/constants'
@@ -24,6 +26,7 @@ export function useSharedData(currentUser) {
   const [tasks, setTasks] = useState([])
   const [dateIdeas, setDateIdeas] = useState([])
   const [dateHistory, setDateHistory] = useState([])
+  const [sharedGoal, setSharedGoal] = useState(null)
   const [loadedUserId, setLoadedUserId] = useState(null)
   const [error, setError] = useState(() => (canUseFirebase() ? '' : 'Firebase is not configured for this build.'))
   const currentUserId = currentUser?.id ?? currentUser?.uid ?? null
@@ -74,12 +77,17 @@ export function useSharedData(currentUser) {
         setDateHistory([])
       },
     )
+    const unsubSharedGoal = subscribeToSharedGoal(
+      (nextGoal) => { setSharedGoal(nextGoal) },
+      () => { setSharedGoal(null) },
+    )
 
     return () => {
       unsubUsers()
       unsubTasks()
       unsubDateIdeas()
       unsubDateHistory()
+      unsubSharedGoal()
     }
   }, [currentUser, currentUserId])
 
@@ -210,11 +218,18 @@ export function useSharedData(currentUser) {
         }
         throw new Error('Firebase is not configured yet for date history.')
       },
+      async upsertSharedGoal(updates) {
+        if (canUseFirebase()) {
+          await upsertSharedGoalDoc(updates)
+          return
+        }
+        throw new Error('Firebase is not configured yet for shared goal.')
+      },
     }),
     [],
   )
 
   const loading = Boolean(currentUserId) && canUseFirebase() && loadedUserId !== currentUserId
 
-  return { users, tasks, dateIdeas, dateHistory, loading, error, actions, usingMockData: false }
+  return { users, tasks, dateIdeas, dateHistory, sharedGoal, loading, error, actions, usingMockData: false }
 }

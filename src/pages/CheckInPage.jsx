@@ -4,6 +4,7 @@ import { BOTH_ASSIGNEE_ID, TASK_STATUS } from '../lib/constants'
 import { fetchCheckInTaskSuggestions } from '../lib/check-in-ai'
 import { buildWeeklyCheckInReview, getWeeklyCheckInOpening } from '../lib/check-in-review'
 import { getTaskStatus, isOverdue, toDate } from '../lib/format'
+import { getTodayDateKey, getTodayQuestion } from '../lib/daily-dialogue'
 import { PageHeader } from './PageHeader'
 
 function isCompletedWithinDays(task, days) {
@@ -42,6 +43,7 @@ export default function CheckInPage({
   onOpenTask,
   onTaskAction,
   onCheckInComplete,
+  onSaveDialogueAnswer,
   onQuickAdd,
 }) {
   const [checkInSuggestions, setCheckInSuggestions] = useState([])
@@ -49,10 +51,19 @@ export default function CheckInPage({
   const [addedSuggestionTitles, setAddedSuggestionTitles] = useState([])
   const [dismissedSuggestions, setDismissedSuggestions] = useState(new Set())
   const [flowStep, setFlowStep] = useState(null)
+  const [appreciation, setAppreciation] = useState('')
+  const [dialogueAnswer, setDialogueAnswer] = useState('')
+  const [dialogueSaved, setDialogueSaved] = useState(false)
 
   const draggingTasks = sections?.draggingTasks ?? []
   const dateIdeasById = Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea]))
   const lastDateNight = dateNightSummary?.lastDate
+
+  const todayKey = getTodayDateKey()
+  const todayQuestion = getTodayQuestion()
+  const myDialogueAnswerToday = currentUser?.dialogueDateKey === todayKey ? currentUser?.dialogueAnswer ?? '' : ''
+  const partnerDialogueAnswerToday = partner?.dialogueDateKey === todayKey ? partner?.dialogueAnswer ?? '' : ''
+  const partnerName = partner?.name ?? 'Partner'
 
   const completedLastWeek = useMemo(
     () => (tasks ?? []).filter((task) => getTaskStatus(task) === TASK_STATUS.COMPLETED && isCompletedWithinDays(task, 7)).slice(0, 4),
@@ -137,6 +148,12 @@ export default function CheckInPage({
     if (!result?.blocked) {
       setAddedSuggestionTitles((current) => [...current, suggestion.title])
     }
+  }
+
+  async function handleSaveDialogueAnswer() {
+    if (!dialogueAnswer.trim()) return
+    await onSaveDialogueAnswer?.({ answer: dialogueAnswer.trim(), dateKey: todayKey })
+    setDialogueSaved(true)
   }
 
   const agenda = checkInReview.agenda
@@ -224,6 +241,51 @@ export default function CheckInPage({
           {checkInOpening ? (
             <p className="px-1 text-sm font-medium text-slate-700">{checkInOpening}</p>
           ) : null}
+
+          {/* ── Daily Dialogue ── */}
+          <div className="rounded-3xl bg-white p-4 ring-1 ring-slate-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Daily question</p>
+            <p className="mt-2 text-sm font-medium text-ink">{todayQuestion}</p>
+
+            {myDialogueAnswerToday ? (
+              <div className="mt-3 rounded-2xl bg-accentSoft px-3 py-2">
+                <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-accent">Your answer</p>
+                <p className="mt-0.5 text-sm text-accent">{myDialogueAnswerToday}</p>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  className="w-full rounded-2xl border border-sand bg-canvas px-3 py-2 text-sm text-ink outline-none placeholder:text-slate-400 focus:border-accent"
+                  rows={2}
+                  placeholder="Your answer…"
+                  value={dialogueSaved ? '' : dialogueAnswer}
+                  onChange={(e) => setDialogueAnswer(e.target.value)}
+                  disabled={dialogueSaved}
+                />
+                {dialogueAnswer.trim() && !dialogueSaved ? (
+                  <button
+                    className="rounded-2xl bg-accent px-3 py-2 text-xs font-semibold text-white transition duration-150 active:scale-[0.98]"
+                    type="button"
+                    onClick={handleSaveDialogueAnswer}
+                  >
+                    Save answer
+                  </button>
+                ) : null}
+                {dialogueSaved ? (
+                  <p className="text-xs text-slate-400">Saved — {partnerName} will see your answer here.</p>
+                ) : null}
+              </div>
+            )}
+
+            {partnerDialogueAnswerToday ? (
+              <div className="mt-3 rounded-2xl bg-canvas px-3 py-2">
+                <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">{partnerName}'s answer</p>
+                <p className="mt-0.5 text-sm text-slate-700">{partnerDialogueAnswerToday}</p>
+              </div>
+            ) : myDialogueAnswerToday ? (
+              <p className="mt-2 text-xs text-slate-400">{partnerName} hasn't answered yet.</p>
+            ) : null}
+          </div>
 
           {agenda.length ? (
             <>
@@ -345,10 +407,29 @@ export default function CheckInPage({
             </div>
           ) : null}
 
+          {/* ── Appreciation exchange ── */}
+          <div className="rounded-3xl bg-white p-4 ring-1 ring-slate-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Appreciation</p>
+            <p className="mt-1 text-sm text-slate-600">What did you appreciate about {partnerName} this week?</p>
+            <textarea
+              className="mt-3 w-full rounded-2xl border border-sand bg-canvas px-3 py-2 text-sm text-ink outline-none placeholder:text-slate-400 focus:border-accent"
+              rows={2}
+              placeholder="Something specific — even something small counts."
+              value={appreciation}
+              onChange={(e) => setAppreciation(e.target.value)}
+            />
+            {currentUser?.checkIn?.lastAppreciation ? (
+              <div className="mt-2 rounded-2xl bg-canvas px-3 py-2">
+                <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">Last week</p>
+                <p className="mt-0.5 text-xs text-slate-600 italic">"{currentUser.checkIn.lastAppreciation}"</p>
+              </div>
+            ) : null}
+          </div>
+
           <button
             className="w-full rounded-2xl bg-accent px-4 py-4 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
             type="button"
-            onClick={onCheckInComplete}
+            onClick={() => onCheckInComplete(appreciation.trim())}
           >
             Complete check-in
           </button>
