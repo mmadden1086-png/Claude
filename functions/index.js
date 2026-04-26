@@ -697,6 +697,10 @@ export const registerPushToken = onCall({ region: 'us-central1' }, async (reques
     throw new HttpsError('invalid-argument', 'A push token is required.')
   }
 
+  const userSnapshot = await db.collection('users').doc(request.auth.uid).get()
+  const existingToken = userSnapshot.data()?.pushToken
+  const isNewToken = existingToken !== token
+
   await db.collection('users').doc(request.auth.uid).set(
     {
       pushToken: token,
@@ -705,28 +709,30 @@ export const registerPushToken = onCall({ region: 'us-central1' }, async (reques
     { merge: true },
   )
 
-  try {
-    const response = await sendToToken(
-      token,
-      'Follow Through notifications enabled',
-      'You will get a heads-up when something needs attention.',
-      { kind: 'test' },
-    )
-
-    console.info(`Notification registration verified for ${request.auth.uid}`, { messageId: response })
-  } catch (error) {
-    console.error(`Notification registration test failed for ${request.auth.uid}`, error)
-
-    if (INVALID_TOKEN_ERRORS.has(error?.code)) {
-      await db.collection('users').doc(request.auth.uid).set(
-        {
-          pushToken: admin.firestore.FieldValue.delete(),
-        },
-        { merge: true },
+  if (isNewToken) {
+    try {
+      const response = await sendToToken(
+        token,
+        'Follow Through notifications enabled',
+        'You will get a heads-up when something needs attention.',
+        { kind: 'test' },
       )
-    }
 
-    throw new HttpsError('internal', error?.message ?? 'Could not verify push notifications.')
+      console.info(`Notification registration verified for ${request.auth.uid}`, { messageId: response })
+    } catch (error) {
+      console.error(`Notification registration test failed for ${request.auth.uid}`, error)
+
+      if (INVALID_TOKEN_ERRORS.has(error?.code)) {
+        await db.collection('users').doc(request.auth.uid).set(
+          {
+            pushToken: admin.firestore.FieldValue.delete(),
+          },
+          { merge: true },
+        )
+      }
+
+      throw new HttpsError('internal', error?.message ?? 'Could not verify push notifications.')
+    }
   }
 
   return { ok: true }
