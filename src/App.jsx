@@ -31,6 +31,8 @@ import {
 } from './lib/date-night'
 import { getTaskStatus, resolveRescheduleDate, resolveSnoozeUntil, toDate } from './lib/format'
 import { logout } from './lib/firestore'
+import { functions } from './lib/firebase'
+import { httpsCallable } from 'firebase/functions'
 import { useAuthSession } from './hooks/use-auth'
 import { useNotifications } from './hooks/use-notifications'
 import { useSharedData } from './hooks/use-shared-data'
@@ -749,13 +751,10 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     }
     addToast('Sending test notification…', null)
     try {
-      const { httpsCallable } = await import('firebase/functions')
-      const sendTestNotification = httpsCallable(functions, 'sendTestNotification')
-      await sendTestNotification()
+      await httpsCallable(functions, 'sendTestNotification')()
       addToast('Test sent — check your notification shade', null)
     } catch (error) {
-      const msg = error?.message ?? 'Test notification failed'
-      addToast(msg, null)
+      addToast(error?.message ?? 'Test notification failed', null)
     }
   }
 
