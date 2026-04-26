@@ -3,7 +3,7 @@ export function ConfirmModal({ title, body, actions, onCancel, busy = false }) {
     ? actions
     : [
         { label: 'Cancel', onClick: onCancel, tone: 'default' },
-        { label: 'Confirm', onClick: onCancel, tone: 'danger' },
+        { label: 'Confirm', onClick: () => {}, tone: 'danger' },
       ])
     .slice()
     .sort((a, b) => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SectionCard } from '../components/SectionCard'
 import { StatsCard } from '../components/StatsCard'

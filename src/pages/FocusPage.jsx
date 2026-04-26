@@ -3,6 +3,31 @@ import { TaskCard } from '../components/TaskCard'
 import { FocusInsightBanner } from '../components/FocusInsightBanner'
 import { getWeeklyCheckInOpening } from '../lib/check-in-review'
 
+function CheckInBanner({ checkInBanner, onPlanCheckIn, onViewCheckInDetails, onDismissCheckInBanner }) {
+  if (!checkInBanner) return null
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+      <p className="font-medium text-ink">{checkInBanner.text}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button
+          className="text-sm font-semibold text-accent underline-offset-4 transition hover:underline active:scale-[0.98]"
+          type="button"
+          onClick={checkInBanner.status === 'scheduled' ? onViewCheckInDetails : onPlanCheckIn}
+        >
+          {checkInBanner.cta}
+        </button>
+        <button
+          className="text-sm font-medium text-slate-500 underline-offset-4 transition hover:underline active:scale-[0.98]"
+          type="button"
+          onClick={onDismissCheckInBanner}
+        >
+          Dismiss today
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function FocusPage({
   sections,
   currentUser,
@@ -44,27 +69,7 @@ export function FocusPage({
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex-1 overflow-y-auto px-4 py-4">
           <div className="space-y-4">
-            {checkInBanner ? (
-              <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-                <p className="font-medium text-ink">{checkInBanner.text}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <button
-                    className="text-sm font-semibold text-accent underline-offset-4 transition hover:underline active:scale-[0.98]"
-                    type="button"
-                    onClick={checkInBanner.status === 'scheduled' ? onViewCheckInDetails : onPlanCheckIn}
-                  >
-                    {checkInBanner.cta}
-                  </button>
-                  <button
-                    className="text-sm font-medium text-slate-500 underline-offset-4 transition hover:underline active:scale-[0.98]"
-                    type="button"
-                    onClick={onDismissCheckInBanner}
-                  >
-                    Dismiss today
-                  </button>
-                </div>
-              </div>
-            ) : null}
+            <CheckInBanner checkInBanner={checkInBanner} onPlanCheckIn={onPlanCheckIn} onViewCheckInDetails={onViewCheckInDetails} onDismissCheckInBanner={onDismissCheckInBanner} />
             <div className="rounded-[1.75rem] border border-white/70 bg-panel/95 p-4 shadow-card">
               <h1 className="text-2xl font-semibold text-ink">You're all caught up</h1>
               <p className="mt-2 text-sm text-slate-500">Nothing active right now. Add something new or browse what's waiting.</p>
@@ -98,27 +103,7 @@ export function FocusPage({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="space-y-2">
-          {checkInBanner ? (
-            <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-              <p className="font-medium text-ink">{checkInBanner.text}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <button
-                  className="text-sm font-semibold text-accent underline-offset-4 transition hover:underline active:scale-[0.98]"
-                  type="button"
-                  onClick={checkInBanner.status === 'scheduled' ? onViewCheckInDetails : onPlanCheckIn}
-                >
-                  {checkInBanner.cta}
-                </button>
-                <button
-                  className="text-sm font-medium text-slate-500 underline-offset-4 transition hover:underline active:scale-[0.98]"
-                  type="button"
-                  onClick={onDismissCheckInBanner}
-                >
-                  Dismiss today
-                </button>
-              </div>
-            </div>
-          ) : null}
+          <CheckInBanner checkInBanner={checkInBanner} onPlanCheckIn={onPlanCheckIn} onViewCheckInDetails={onViewCheckInDetails} onDismissCheckInBanner={onDismissCheckInBanner} />
           {accountabilityBanner ? (
             <div className="rounded-3xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
               {accountabilityBanner}

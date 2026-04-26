@@ -198,18 +198,15 @@ export function TasksPage({
 
           {focusTask && (
             <div className="mb-2">
-              <div className="text-xs text-slate-500 mb-1">
-                What needs attention
-              </div>
+              <p className="mb-1 text-xs text-slate-500">What needs attention</p>
               <TaskCard
                 task={focusTask}
                 currentUser={currentUser}
-                usersById={usersById}
                 onAction={onTaskAction}
                 onOpen={onOpenTask}
                 variant="focus"
-                showWhy
-                showDoneWhen
+                highlight
+                motionState={taskMotionState?.(focusTask.id)}
               />
             </div>
           )}

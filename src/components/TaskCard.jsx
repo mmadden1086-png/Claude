@@ -216,7 +216,7 @@ export function TaskCard({
 
         {interactive ? (
           <button
-            className="py-1 text-center text-sm text-slate-400 transition duration-150 active:opacity-50"
+            className="py-1 text-center text-sm font-medium text-slate-500 transition duration-150 hover:text-accent active:opacity-60"
             type="button"
             onClick={(event) => { event.stopPropagation(); onOpen(task.id) }}
           >
