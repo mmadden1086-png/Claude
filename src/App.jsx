@@ -742,6 +742,23 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     }
   }
 
+  async function handleSendTestNotification() {
+    if (!functions) {
+      addToast('Firebase is not connected', null)
+      return
+    }
+    addToast('Sending test notification…', null)
+    try {
+      const { httpsCallable } = await import('firebase/functions')
+      const sendTestNotification = httpsCallable(functions, 'sendTestNotification')
+      await sendTestNotification()
+      addToast('Test sent — check your notification shade', null)
+    } catch (error) {
+      const msg = error?.message ?? 'Test notification failed'
+      addToast(msg, null)
+    }
+  }
+
   async function restoreSnapshot(taskId, snapshot) {
     await actions.restoreTask(taskId, snapshot)
   }
@@ -1404,6 +1421,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     setQuickAddExpanded: updateQuickAddExpanded,
     notificationStatus,
     onEnableNotifications: handleEnableNotifications,
+    onSendTestNotification: handleSendTestNotification,
     onOpenGoalEditor: (goalKey) => setGoalEditor({ key: goalKey }),
     onOpenDateIdeaModal: () => { setEditingDateIdea(null); setDateIdeaModalOpen(true) },
     onOpenDateNight: () => navigate('/dates'),
