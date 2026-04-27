@@ -69,9 +69,9 @@ export function MenuPage({
 
       <SectionCard title="Notifications" subtitle="Get reminders for upcoming tasks and daily summaries.">
         {(() => {
-          const isError = ['blocked', 'unsupported', 'service-worker', 'config-error', 'install-required'].includes(notificationStatus)
+          const isError = ['blocked', 'unsupported', 'service-worker', 'config-error'].includes(notificationStatus)
           const label = {
-            enabled: 'Notifications on',
+            enabled: 'Notifications on — tap to re-test',
             working: 'Setting up…',
             blocked: 'Notifications blocked',
             unsupported: 'Not supported on this device',
@@ -92,7 +92,7 @@ export function MenuPage({
               <button
                 className={`w-full rounded-3xl px-4 py-4 text-left text-sm font-semibold ${isError ? 'bg-rose-50 text-rose-700' : notificationStatus === 'enabled' ? 'bg-accentSoft text-accent' : 'bg-white text-slate-700'}`}
                 type="button"
-                disabled={notificationStatus === 'working' || notificationStatus === 'enabled'}
+                disabled={notificationStatus === 'working'}
                 onClick={onEnableNotifications}
               >
                 <span className="inline-flex items-center gap-2">

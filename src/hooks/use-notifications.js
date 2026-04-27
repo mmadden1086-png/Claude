@@ -108,7 +108,7 @@ async function registerPushTokenOnServer(token) {
 export function useNotifications(userId) {
   const [status, setStatus] = useState(() => {
     if (typeof window === 'undefined' || typeof Notification === 'undefined') return 'idle'
-    return Notification.permission === 'granted' && window.localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) === 'true' ? 'working' : 'idle'
+    return Notification.permission === 'granted' && window.localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) === 'true' ? 'enabled' : 'idle'
   })
 
   useEffect(() => {

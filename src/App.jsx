@@ -809,22 +809,18 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
   }
 
   async function handleEnableNotifications() {
-    addToast('Checking notification permissions...', null)
-
     try {
       const result = await enableNotifications()
       const message = result?.message ?? 'Could not enable notifications.'
       addToast(message, null)
 
-      if (result?.status !== 'enabled' && typeof window !== 'undefined' && typeof window.alert === 'function') {
+      const BLOCKING_STATUSES = ['blocked', 'unsupported', 'config-error', 'service-worker', 'install-required']
+      if (BLOCKING_STATUSES.includes(result?.status) && typeof window !== 'undefined' && typeof window.alert === 'function') {
         window.alert(message)
       }
     } catch (enableError) {
       const message = enableError?.message ?? 'Could not enable notifications.'
       addToast(message, null)
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert(message)
-      }
     }
   }
 
