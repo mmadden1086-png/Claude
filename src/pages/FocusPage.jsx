@@ -12,7 +12,7 @@ const MOOD_LEVELS = [
   { level: 5, emoji: '😄', label: 'Great' },
 ]
 
-function MoodWidget({ currentUser, partner, onSetMoodLevel }) {
+export function MoodWidget({ currentUser, partner, onSetMoodLevel }) {
   const myLevel = currentUser?.moodLevel ?? null
   const partnerLevel = partner?.moodLevel ?? null
   const partnerName = partner?.name ?? 'Partner'
@@ -48,7 +48,7 @@ function MoodWidget({ currentUser, partner, onSetMoodLevel }) {
   )
 }
 
-function SharedGoalCard({ goal, onEditGoal }) {
+export function SharedGoalCard({ goal, onEditGoal }) {
   if (!goal?.title) return null
   const target = goal.targetAmount || 0
   const current = Math.min(goal.currentAmount || 0, target)

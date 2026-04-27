@@ -4,6 +4,7 @@ import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { QuickAddCard } from '../components/QuickAddCard'
 import { TaskCard } from '../components/TaskCard'
+import { MoodWidget, SharedGoalCard } from './FocusPage'
 import { FILTERS, TASK_STATUS } from '../lib/constants'
 import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
@@ -56,6 +57,7 @@ export function TasksPage({
   sections,
   filteredTasks,
   currentUser,
+  partner,
   usersById,
   filterId,
   setFilterId,
@@ -65,6 +67,9 @@ export function TasksPage({
   onOpenTask,
   taskMotionState,
   onWeeklyReassign,
+  sharedGoal,
+  onSetMoodLevel,
+  onEditSharedGoal,
 }) {
   const focusTask = selection?.focusTask ?? sections?.focusTask ?? null
 
@@ -187,6 +192,9 @@ export function TasksPage({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="space-y-4">
+
+          <MoodWidget currentUser={currentUser} partner={partner} onSetMoodLevel={onSetMoodLevel} />
+          <SharedGoalCard goal={sharedGoal} onEditGoal={onEditSharedGoal} />
 
           {focusTask && (
             <div className="mb-2">
