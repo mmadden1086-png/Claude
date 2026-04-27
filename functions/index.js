@@ -946,18 +946,19 @@ export const sendThinkingOfYou = onCall({ region: 'us-central1' }, async (reques
   const usersSnapshot = await db.collection('users').get()
   const allUsers = usersSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
   const partner = allUsers.find((u) => u.id !== request.auth.uid)
+  const sender = allUsers.find((u) => u.id === request.auth.uid)
 
-  if (!partner?.pushToken) {
+  const partnerReachable = partner?.pushToken || (partner?.smsEnabled && partner?.phoneNumber) || (partner?.emailEnabled && (partner?.notificationEmail || partner?.email))
+  if (!partnerReachable) {
     throw new HttpsError('failed-precondition', 'Your partner does not have notifications enabled yet.')
   }
 
-  const senderSnap = await db.collection('users').doc(request.auth.uid).get()
-  const senderName = senderSnap.data()?.name ?? 'Your partner'
+  const senderName = sender?.name ?? 'Your partner'
   const messageIndex = Math.floor(Math.random() * THINKING_OF_YOU_MESSAGES.length)
   const message = THINKING_OF_YOU_MESSAGES[messageIndex]
 
   try {
-    await sendToToken(partner.pushToken, senderName, message, { kind: 'thinking-of-you', sentBy: request.auth.uid })
+    await notifyUser(partner.id, senderName, message, { kind: 'thinking-of-you', sentBy: request.auth.uid })
     return { ok: true }
   } catch (error) {
     throw new HttpsError('internal', error?.message ?? 'Could not send notification.')
@@ -1135,7 +1136,8 @@ export const smartDailyCheck = onSchedule(
     await Promise.all(
       usersSnapshot.docs.map(async (userDoc) => {
         const user = userDoc.data()
-        if (!user?.pushToken) return
+        const hasChannel = user?.pushToken || (user?.smsEnabled && user?.phoneNumber) || (user?.emailEnabled && (user?.notificationEmail || user?.email))
+        if (!hasChannel) return
 
         const notifications = user.notifications ?? {}
 
