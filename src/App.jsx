@@ -10,6 +10,7 @@ import { DateIdeaModal } from './components/DateIdeaModal'
 import { AuthScreen } from './components/AuthScreen'
 import { DuplicateTaskModal } from './components/DuplicateTaskModal'
 import { GoalSettingsModal } from './components/GoalSettingsModal'
+import { QuickAddCard } from './components/QuickAddCard'
 import { StatsDrilldownModal } from './components/StatsDrilldownModal'
 import { TaskDetailModal } from './components/TaskDetailModal'
 import { TimeSelect } from './components/TimeSelect'
@@ -280,6 +281,7 @@ function App() {
   const [checkInPlanTime, setCheckInPlanTime] = useState('19:00')
   const [checkInDismissTick, setCheckInDismissTick] = useState(0)
   const [accountabilityBanner, setAccountabilityBanner] = useState('')
+  const [pendingCancelDateTask, setPendingCancelDateTask] = useState(null)
   const [sharedGoalModalOpen, setSharedGoalModalOpen] = useState(false)
   const [sharedGoalBusy, setSharedGoalBusy] = useState(false)
   const [checkInBusy, setCheckInBusy] = useState(false)
@@ -709,7 +711,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
   }
 
   function handleViewCheckInDetails() {
-    navigate('/tasks')
+    navigate('/checkin')
   }
 
   function handleDismissCheckInBanner() {
@@ -797,12 +799,14 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
 
   async function handleCancelDateTask(task) {
     if (!task) return
+    const snapshot = { ...task }
+    setPendingCancelDateTask(null)
     setDateMorningPrompt(null)
     await runTaskMutation('date-cancel', task, async () => {
       await actions.deleteTask(task.id)
     })
     clearDateReminderEntry(task.id)
-    addToast('Date cancelled', null)
+    addToast('Date cancelled', async () => restoreSnapshot(task.id, snapshot))
   }
 
   function handleStartHere() {
@@ -1517,7 +1521,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     onEditDateIdea: handleEditDateIdea,
     onArchiveDateIdea: handleArchiveDateIdea,
     onUnarchiveDateIdea: handleUnarchiveDateIdea,
-    onCancelPlannedDate: handleCancelDateTask,
+    onCancelPlannedDate: setPendingCancelDateTask,
     onAddAiDateIdea: handleAddAiDateIdea,
     onStartHere: handleStartHere,
     onQuickAdd: handleQuickAdd,
@@ -1575,6 +1579,25 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
                 </span>
               </button>
             </div>
+          </div>
+        </section>
+      ) : null}
+
+      {quickAddExpanded ? (
+        <section className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 px-4 py-6 backdrop-blur-sm sm:items-center" onClick={() => updateQuickAddExpanded(false)}>
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <QuickAddCard
+              currentUser={currentUser}
+              users={users}
+              tasks={tasks}
+              defaults={quickAddDefaults}
+              onSubmit={handleQuickAdd}
+              expanded
+              onExpandedChange={updateQuickAddExpanded}
+            />
           </div>
         </section>
       ) : null}
@@ -1844,6 +1867,18 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
             },
           ]}
           onCancel={() => setCheckInDatePrompt(false)}
+        />
+      ) : null}
+
+      {pendingCancelDateTask ? (
+        <ConfirmModal
+          title={`Cancel "${pendingCancelDateTask.title}"?`}
+          body="This removes the planned date task. You can undo right after."
+          actions={[
+            { label: 'Keep date', onClick: () => setPendingCancelDateTask(null), tone: 'default' },
+            { label: 'Cancel date', onClick: () => handleCancelDateTask(pendingCancelDateTask), tone: 'danger' },
+          ]}
+          onCancel={() => setPendingCancelDateTask(null)}
         />
       ) : null}
 

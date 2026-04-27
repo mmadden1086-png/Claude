@@ -911,13 +911,14 @@ export const sendNotification = onCall({ region: 'us-central1' }, async (request
   const token = typeof request.data?.token === 'string' ? request.data.token.trim() : ''
   const title = typeof request.data?.title === 'string' ? request.data.title.trim() : ''
   const body = typeof request.data?.body === 'string' ? request.data.body.trim() : ''
+  const data = request.data?.data && typeof request.data.data === 'object' ? request.data.data : {}
 
   if (!token || !title) {
     throw new HttpsError('invalid-argument', 'token and title are required.')
   }
 
   try {
-    await sendToToken(token, title, body, { kind: 'manual', sentBy: request.auth.uid })
+    await sendToToken(token, title, body, { kind: 'manual', sentBy: request.auth.uid, ...data })
     return { ok: true }
   } catch (error) {
     throw new HttpsError('internal', error?.message ?? 'Could not send notification.')
