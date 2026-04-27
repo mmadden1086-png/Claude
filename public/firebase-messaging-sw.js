@@ -4,12 +4,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js')
 
 firebase.initializeApp({
-  apiKey: 'REPLACE_AT_DEPLOY',
-  authDomain: 'REPLACE_AT_DEPLOY',
-  projectId: 'REPLACE_AT_DEPLOY',
-  storageBucket: 'REPLACE_AT_DEPLOY',
-  messagingSenderId: 'REPLACE_AT_DEPLOY',
-  appId: 'REPLACE_AT_DEPLOY',
+  apiKey: 'AIzaSyAhgGIhmiJYS5ZxA4N0HETLBa9W3EcWErI',
+  authDomain: 'follow-through-87d50.firebaseapp.com',
+  projectId: 'follow-through-87d50',
+  storageBucket: 'follow-through-87d50.firebasestorage.app',
+  messagingSenderId: '153740630717',
+  appId: '1:153740630717:web:46e7580b3c75564c74b5d4',
 })
 
 const messaging = firebase.messaging()
