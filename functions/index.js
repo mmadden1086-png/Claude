@@ -1295,10 +1295,9 @@ export const onUserUpdated = onDocumentUpdated('users/{uid}', async (event) => {
   }
 })
 
-// Notifies both partners when the shared financial goal hits a progress milestone (25/50/75/100%).
-// Uses Promise.allSettled so one user's send failure does not prevent the milestone from
-// being marked as notified (which would cause duplicate sends on the next write).
-export const onSharedGoalUpdated = onDocumentUpdated('sharedGoals/household', async (event) => {
+// Notifies relevant users when a goal hits a progress milestone (25/50/75/100%).
+// Individual goals notify only the owner; shared goals notify everyone.
+export const onGoalUpdated = onDocumentUpdated('goals/{goalId}', async (event) => {
   const before = event.data.before.data()
   const after = event.data.after.data()
 
@@ -1325,13 +1324,17 @@ export const onSharedGoalUpdated = onDocumentUpdated('sharedGoals/household', as
       const body = MILESTONE_MESSAGES[milestone](after.title ?? 'your goal')
 
       // Mark milestone notified BEFORE sending so retries do not double-notify.
-      await db.doc('sharedGoals/household').update({
+      await db.collection('goals').doc(event.params.goalId).update({
         notifiedMilestones: admin.firestore.FieldValue.arrayUnion(milestone),
       })
 
       const usersSnapshot = await db.collection('users').get()
-      await Promise.allSettled(usersSnapshot.docs.map((d) =>
-        sendToUser(d.id, heading, body, { kind: 'goal-milestone', milestone: String(milestone) }),
+      const recipientIds = after.ownerId
+        ? [after.ownerId] // individual goal — notify owner only
+        : usersSnapshot.docs.map((d) => d.id) // shared goal — notify everyone
+
+      await Promise.allSettled(recipientIds.map((uid) =>
+        sendToUser(uid, heading, body, { kind: 'goal-milestone', milestone: String(milestone), goalId: event.params.goalId }),
       ))
 
       break // one milestone notification per update

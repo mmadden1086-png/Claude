@@ -14,7 +14,7 @@ function progressDisplay(goal) {
   const current = Math.min(goal.currentAmount || 0, target)
   if (!target) return null
   const percent = Math.round((current / target) * 100)
-  const u = goal.unit ? `${goal.unit} ` : ''
+  const u = goal.unit ? `${goal.unit} ` : ''
   return { current, target, percent, u }
 }
 
