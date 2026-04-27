@@ -20,6 +20,25 @@ const INVALID_TOKEN_ERRORS = new Set([
   'messaging/registration-token-not-registered',
 ])
 
+async function sendSMS(to, body) {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const fromNumber = process.env.TWILIO_FROM_NUMBER
+  if (!accountSid || !authToken || !fromNumber || !to) return
+  const twilio = (await import('twilio')).default
+  const client = twilio(accountSid, authToken)
+  await client.messages.create({ body, from: fromNumber, to })
+}
+
+async function sendEmail(to, subject, text) {
+  const apiKey = process.env.SENDGRID_API_KEY
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@followthrough.app'
+  if (!apiKey || !to) return
+  const sgMail = (await import('@sendgrid/mail')).default
+  sgMail.setApiKey(apiKey)
+  await sgMail.send({ to, from: fromEmail, subject, text })
+}
+
 function normalizeTaskTitle(title = 'Task') {
   return String(title || 'Task').trim().replace(/\s+/g, ' ')
 }
@@ -174,37 +193,63 @@ function parseCheckInTasksContent(content, payload) {
   }
 }
 
-async function sendToUser(userId, title, body, data = {}) {
+async function notifyUser(userId, title, body, data = {}) {
   if (!userId) return
   const userSnapshot = await db.collection('users').doc(userId).get()
   const user = userSnapshot.data()
-  if (!user?.pushToken) {
-    console.info(`Skipping notification for ${userId}: no push token saved.`)
-    return
+  if (!user) return
+
+  const sends = []
+
+  // Push notification
+  if (user.pushToken) {
+    sends.push(
+      messaging.send({
+        token: user.pushToken,
+        notification: { title, body },
+        data: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, String(value)])),
+      }).then((response) => {
+        console.info(`Push sent to ${userId}`, { messageId: response, kind: data.kind ?? 'generic' })
+      }).catch(async (error) => {
+        console.error(`Push failed for ${userId}`, error)
+        if (INVALID_TOKEN_ERRORS.has(error?.code)) {
+          await db.collection('users').doc(userId).set(
+            { pushToken: admin.firestore.FieldValue.delete() },
+            { merge: true },
+          )
+        }
+      })
+    )
   }
 
-  try {
-    const response = await messaging.send({
-      token: user.pushToken,
-      notification: { title, body },
-      data: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, String(value)])),
-    })
+  // SMS
+  if (user.smsEnabled && user.phoneNumber) {
+    sends.push(
+      sendSMS(user.phoneNumber, `${title}: ${body}`).catch((error) => {
+        console.error(`SMS failed for ${userId}`, error)
+      })
+    )
+  }
 
-    console.info(`Notification sent to ${userId}`, { messageId: response, kind: data.kind ?? 'generic' })
-  } catch (error) {
-    console.error(`Notification send failed for ${userId}`, error)
-
-    if (INVALID_TOKEN_ERRORS.has(error?.code)) {
-      await db.collection('users').doc(userId).set(
-        {
-          pushToken: admin.firestore.FieldValue.delete(),
-        },
-        { merge: true },
+  // Email
+  if (user.emailEnabled) {
+    const toEmail = user.notificationEmail || user.email
+    if (toEmail) {
+      sends.push(
+        sendEmail(toEmail, `Follow Through: ${title}`, body).catch((error) => {
+          console.error(`Email failed for ${userId}`, error)
+        })
       )
     }
-
-    throw error
   }
+
+  await Promise.allSettled(sends)
+}
+
+// Keep for backwards compatibility — callers that expect re-throw behaviour
+// (onTaskCreated, onTaskUpdated) still call this.
+async function sendToUser(userId, title, body, data = {}) {
+  await notifyUser(userId, title, body, data)
 }
 
 async function sendToToken(token, title, body, data = {}) {
@@ -1357,4 +1402,35 @@ export const testRelationshipNotification = onCall({ region: 'us-central1' }, as
   }
 
   return { ok: true, kind, sentTo: payload.recipientId ?? 'both' }
+})
+
+export const saveNotificationPreferences = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'You must be signed in.')
+  }
+
+  const updates = {}
+  if (typeof request.data?.phoneNumber === 'string') {
+    updates.phoneNumber = request.data.phoneNumber.trim()
+  }
+  if (typeof request.data?.smsEnabled === 'boolean') {
+    updates.smsEnabled = request.data.smsEnabled
+  }
+  if (typeof request.data?.emailEnabled === 'boolean') {
+    updates.emailEnabled = request.data.emailEnabled
+  }
+  if (typeof request.data?.notificationEmail === 'string') {
+    updates.notificationEmail = request.data.notificationEmail.trim()
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new HttpsError('invalid-argument', 'No preferences provided.')
+  }
+
+  await db.collection('users').doc(request.auth.uid).set(
+    { ...updates, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+    { merge: true },
+  )
+
+  return { ok: true }
 })

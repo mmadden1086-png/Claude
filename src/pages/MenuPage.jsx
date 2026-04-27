@@ -1,4 +1,5 @@
-import { Bell, Heart, MessageCircleHeart, MoonStar, SunMedium, Target, Zap } from 'lucide-react'
+import { Bell, Heart, Mail, MessageCircleHeart, MoonStar, Phone, SunMedium, Target, Zap } from 'lucide-react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from './PageHeader'
@@ -13,6 +14,8 @@ export function MenuPage({
   onEnableNotifications,
   onSendTestNotification,
   onTestPartnerNotification,
+  currentUser,
+  onSaveNotificationPrefs,
   onStartHere,
   goals,
   goalSuggestion,
@@ -23,6 +26,36 @@ export function MenuPage({
   onSignOut,
 }) {
   const navigate = useNavigate()
+  const [phone, setPhone] = useState(currentUser?.phoneNumber ?? '')
+  const [notifEmail, setNotifEmail] = useState(currentUser?.notificationEmail ?? currentUser?.email ?? '')
+  const [phoneSaving, setPhoneSaving] = useState(false)
+  const [emailSaving, setEmailSaving] = useState(false)
+
+  async function handleSavePhone() {
+    setPhoneSaving(true)
+    await onSaveNotificationPrefs({ phoneNumber: phone })
+    setPhoneSaving(false)
+  }
+
+  async function handleToggleSMS() {
+    const next = !currentUser?.smsEnabled
+    if (next && !currentUser?.phoneNumber && !phone.trim()) return
+    await onSaveNotificationPrefs({ smsEnabled: next })
+  }
+
+  async function handleSaveEmail() {
+    setEmailSaving(true)
+    await onSaveNotificationPrefs({ notificationEmail: notifEmail })
+    setEmailSaving(false)
+  }
+
+  async function handleToggleEmail() {
+    await onSaveNotificationPrefs({ emailEnabled: !currentUser?.emailEnabled })
+  }
+
+  const smsEnabled = currentUser?.smsEnabled ?? false
+  const emailEnabled = currentUser?.emailEnabled ?? false
+  const hasPhone = Boolean(currentUser?.phoneNumber)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -67,11 +100,11 @@ export function MenuPage({
         </button>
       </SectionCard>
 
-      <SectionCard title="Notifications" subtitle="Get reminders for upcoming tasks and daily summaries.">
+      <SectionCard title="Push notifications" subtitle="Real-time alerts for tasks, partner activity, and reminders.">
         {(() => {
           const isError = ['blocked', 'unsupported', 'service-worker', 'config-error', 'error'].includes(notificationStatus)
           const label = {
-            enabled: 'Notifications on — tap to re-test',
+            enabled: 'Push on — tap to re-test',
             working: 'Setting up…',
             blocked: 'Notifications blocked',
             unsupported: 'Not supported on this device',
@@ -79,7 +112,7 @@ export function MenuPage({
             'config-error': 'Not configured',
             'install-required': 'Install app first',
             error: 'Setup failed — tap to retry',
-          }[notificationStatus] ?? 'Enable notifications'
+          }[notificationStatus] ?? 'Enable push notifications'
           const errorNote = {
             blocked: 'Permission was denied. Open your browser settings and allow notifications for this site.',
             unsupported: 'Your browser or device doesn\'t support push notifications.',
@@ -92,7 +125,7 @@ export function MenuPage({
           return (
             <>
               <button
-                className={`w-full rounded-3xl px-4 py-4 text-left text-sm font-semibold ${isError ? 'bg-rose-50 text-rose-700' : notificationStatus === 'enabled' ? 'bg-accentSoft text-accent' : 'bg-white text-slate-700'}`}
+                className={`w-full rounded-3xl px-4 py-4 text-left text-sm font-semibold transition duration-150 active:scale-[0.98] ${isError ? 'bg-rose-50 text-rose-700' : notificationStatus === 'enabled' ? 'bg-accentSoft text-accent' : 'bg-white text-slate-700'}`}
                 type="button"
                 disabled={notificationStatus === 'working'}
                 onClick={onEnableNotifications}
@@ -111,24 +144,88 @@ export function MenuPage({
                     type="button"
                     onClick={onSendTestNotification}
                   >
-                    Send test notification to myself
+                    Send test to myself
                   </button>
                   <button
                     className="w-full rounded-3xl bg-white px-4 py-3 text-left text-sm font-medium text-slate-600 transition duration-150 active:scale-[0.98]"
                     type="button"
                     onClick={onTestPartnerNotification}
                   >
-                    Test partner notification (mood alert)
+                    Test partner notification
                   </button>
                 </>
               ) : null}
             </>
           )
         })()}
-        <div className="mt-3 space-y-3 text-sm text-slate-600">
-          <div className="rounded-3xl bg-canvas p-4">Push alerts: assigned tasks, due-soon reminders, morning check-in, evening wrap-up.</div>
-          <div className="rounded-3xl bg-canvas p-4">SMS: coming soon — high-reliability alerts for time-sensitive tasks.</div>
-          <div className="rounded-3xl bg-canvas p-4">Email: coming soon — morning and evening summaries.</div>
+      </SectionCard>
+
+      <SectionCard title="SMS alerts" subtitle="High-priority alerts sent as text messages via Twilio.">
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              className="flex-1 rounded-2xl border border-sand bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+              type="tel"
+              placeholder="+1 (555) 000-0000"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <button
+              className="shrink-0 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98] disabled:opacity-50"
+              type="button"
+              disabled={phoneSaving || !phone.trim()}
+              onClick={handleSavePhone}
+            >
+              {phoneSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          <button
+            className={`w-full rounded-3xl px-4 py-4 text-left text-sm font-semibold transition duration-150 active:scale-[0.98] ${smsEnabled ? 'bg-accentSoft text-accent' : 'bg-white text-slate-700'} ${!hasPhone ? 'opacity-50' : ''}`}
+            type="button"
+            disabled={!hasPhone}
+            onClick={handleToggleSMS}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Phone size={16} /> {smsEnabled ? 'SMS alerts on' : 'SMS alerts off'}
+            </span>
+          </button>
+          {!hasPhone ? (
+            <p className="px-1 text-xs text-slate-400">Add a phone number above to enable SMS alerts.</p>
+          ) : (
+            <p className="px-1 text-xs text-slate-400">Mood drops, appreciation, dialogue answers, and due-soon reminders. Requires Twilio credentials in Firebase.</p>
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Email digests" subtitle="Daily summaries and reminders sent to your inbox via SendGrid.">
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              className="flex-1 rounded-2xl border border-sand bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+              type="email"
+              placeholder="your@email.com"
+              value={notifEmail}
+              onChange={(e) => setNotifEmail(e.target.value)}
+            />
+            <button
+              className="shrink-0 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98] disabled:opacity-50"
+              type="button"
+              disabled={emailSaving || !notifEmail.trim()}
+              onClick={handleSaveEmail}
+            >
+              {emailSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          <button
+            className={`w-full rounded-3xl px-4 py-4 text-left text-sm font-semibold transition duration-150 active:scale-[0.98] ${emailEnabled ? 'bg-accentSoft text-accent' : 'bg-white text-slate-700'}`}
+            type="button"
+            onClick={handleToggleEmail}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Mail size={16} /> {emailEnabled ? 'Email digests on' : 'Email digests off'}
+            </span>
+          </button>
+          <p className="px-1 text-xs text-slate-400">Morning and evening task summaries, weekly check-in reminders. Requires SendGrid credentials in Firebase.</p>
         </div>
       </SectionCard>
 

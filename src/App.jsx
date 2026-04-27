@@ -97,6 +97,10 @@ function findCurrentUser(sessionUser, users) {
       nextPlannedAt: existing?.checkIn?.nextPlannedAt ?? null,
       lastAppreciation: existing?.checkIn?.lastAppreciation ?? '',
     },
+    phoneNumber: existing?.phoneNumber ?? '',
+    smsEnabled: existing?.smsEnabled ?? false,
+    emailEnabled: existing?.emailEnabled ?? false,
+    notificationEmail: existing?.notificationEmail ?? '',
     goals,
   }
 }
@@ -679,6 +683,14 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
       addToast('Sent ❤️', null)
     } catch (error) {
       addToast(error?.message ?? 'Could not send', null)
+    }
+  }
+
+  async function handleSaveNotificationPrefs(prefs) {
+    try {
+      await actions.updateUserProfile({ id: currentUser.id, ...prefs })
+    } catch {
+      addToast('Could not save notification preferences', null)
     }
   }
 
@@ -1534,6 +1546,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     sharedGoal,
     onEditSharedGoal: () => setSharedGoalModalOpen(true),
     onThinkingOfYou: handleThinkingOfYou,
+    onSaveNotificationPrefs: handleSaveNotificationPrefs,
   }
 
   return (
