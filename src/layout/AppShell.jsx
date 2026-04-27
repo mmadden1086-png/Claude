@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { ActivityPage } from '../pages/ActivityPage'
 import { DateNightPage } from '../pages/DateNightPage'
 import CheckInPage from '../pages/CheckInPage'
+import { FocusPage } from '../pages/FocusPage'
 import { MenuPage } from '../pages/MenuPage'
 import { TasksPage } from '../pages/TasksPage'
 
@@ -26,6 +27,7 @@ export function AppShell({ pageProps }) {
 
         <Routes>
           <Route path="/" element={<Navigate to="/tasks" replace />} />
+          <Route path="/focus" element={<FocusPage {...pageProps} />} />
           <Route path="/tasks" element={<TasksPage {...pageProps} />} />
           <Route path="/checkin" element={<CheckInPage {...pageProps} />} />
           <Route path="/dates" element={<DateNightPage {...pageProps} />} />

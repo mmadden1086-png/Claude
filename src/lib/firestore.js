@@ -18,6 +18,7 @@ const usersCollection = db ? collection(db, 'users') : null
 const tasksCollection = db ? collection(db, 'tasks') : null
 const dateIdeasCollection = db ? collection(db, 'dateIdeas') : null
 const dateHistoryCollection = db ? collection(db, 'dateHistory') : null
+const sharedGoalDoc = db ? doc(db, 'sharedGoals', 'household') : null
 
 export function canUseFirebase() {
   return hasFirebaseConfig && Boolean(db)
@@ -198,4 +199,22 @@ export async function createDateHistory(payload) {
     ...payload,
     createdAt: serverTimestamp(),
   })
+}
+
+export function subscribeToSharedGoal(onData, onError) {
+  if (!sharedGoalDoc) return () => {}
+  return onSnapshot(
+    sharedGoalDoc,
+    (snapshot) => {
+      onData(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null)
+    },
+    (error) => {
+      if (onError) onError(error)
+    },
+  )
+}
+
+export async function upsertSharedGoal(updates) {
+  if (!db) return
+  await setDoc(sharedGoalDoc, { ...updates, updatedAt: serverTimestamp() }, { merge: true })
 }

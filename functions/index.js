@@ -837,12 +837,15 @@ export const dueSoonSweep = onSchedule(
         if (lastNotified && now - lastNotified < cooldownMs) return
 
         const targetIds = task.assignedTo === 'both' ? allUserIds : [task.assignedTo]
+        const isProtected = task.protected === true
         await Promise.all(
           targetIds.map((uid) =>
-            sendToUser(uid, 'Follow Through', `${task.title} needs attention`, {
-              taskId: taskDoc.id,
-              kind: 'due-soon',
-            }),
+            sendToUser(
+              uid,
+              isProtected ? 'Protect this time' : 'Follow Through',
+              isProtected ? `Self-care reminder: ${task.title} is coming up` : `${task.title} needs attention`,
+              { taskId: taskDoc.id, kind: isProtected ? 'due-soon-protected' : 'due-soon' },
+            ),
           ),
         )
         await db.collection('tasks').doc(taskDoc.id).update({
@@ -870,6 +873,45 @@ export const sendNotification = onCall({ region: 'us-central1' }, async (request
 
   try {
     await sendToToken(token, title, body, { kind: 'manual', sentBy: request.auth.uid })
+    return { ok: true }
+  } catch (error) {
+    throw new HttpsError('internal', error?.message ?? 'Could not send notification.')
+  }
+})
+
+const THINKING_OF_YOU_MESSAGES = [
+  'Thinking of you today ❤️',
+  'Just wanted you to know I appreciate you.',
+  "Hey — you matter to me. That's all.",
+  'Rooting for you today.',
+  "You're doing great. I see it.",
+  'Sending you a little love right now.',
+  "I'm glad we're in this together.",
+  "You've been on my mind. In a good way.",
+  "Today feels better knowing you're in it.",
+  'Just a reminder that I love you.',
+]
+
+export const sendThinkingOfYou = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'You must be signed in.')
+  }
+
+  const usersSnapshot = await db.collection('users').get()
+  const allUsers = usersSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const partner = allUsers.find((u) => u.id !== request.auth.uid)
+
+  if (!partner?.pushToken) {
+    throw new HttpsError('failed-precondition', 'Your partner does not have notifications enabled yet.')
+  }
+
+  const senderSnap = await db.collection('users').doc(request.auth.uid).get()
+  const senderName = senderSnap.data()?.name ?? 'Your partner'
+  const messageIndex = Math.floor(Math.random() * THINKING_OF_YOU_MESSAGES.length)
+  const message = THINKING_OF_YOU_MESSAGES[messageIndex]
+
+  try {
+    await sendToToken(partner.pushToken, senderName, message, { kind: 'thinking-of-you', sentBy: request.auth.uid })
     return { ok: true }
   } catch (error) {
     throw new HttpsError('internal', error?.message ?? 'Could not send notification.')
@@ -930,21 +972,27 @@ const MESSAGE_POOLS = {
       "Your partner's tasks are really overdue — five or more pending.",
     ],
   },
+  fairness: {
+    low: [
+      'The task load has been a little uneven lately. Worth a look at the Balance tab.',
+      'One of you has been doing slightly more than the other recently.',
+      'A small imbalance is building up. The Balance tab in Activity shows the split.',
+    ],
+    medium: [
+      'One of you has been carrying noticeably more than the other. Worth talking about.',
+      'The household workload is uneven right now. Balance tab has the breakdown.',
+      'Worth a conversation about how tasks are splitting — things are lopsided.',
+    ],
+    high: [
+      "The household load is really lopsided right now — worth talking about before it builds.",
+      'One person is handling most of the household tasks. That is not sustainable.',
+      'A big imbalance in the task split. Now is a good time to redistribute.',
+    ],
+  },
 }
 
 const SEVERITY_RANK = { low: 1, medium: 2, high: 3 }
 
-function isWithinSendWindow(now) {
-  const hour = parseInt(
-    new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      hour12: false,
-      timeZone: 'America/Los_Angeles',
-    }).format(now),
-    10,
-  )
-  return hour >= 8 && hour < 20
-}
 
 function checkInSeverity(daysSince) {
   if (daysSince >= 11) return 'high'
@@ -968,6 +1016,13 @@ function partnerTasksSeverity(count) {
   return null
 }
 
+function fairnessSeverity(imbalance) {
+  if (imbalance > 0.25) return 'high'
+  if (imbalance > 0.2) return 'medium'
+  if (imbalance > 0.15) return 'low'
+  return null
+}
+
 function pickMessage(pool, lastMessage) {
   const candidates = pool.filter((m) => m !== lastMessage)
   const source = candidates.length ? candidates : pool
@@ -976,7 +1031,7 @@ function pickMessage(pool, lastMessage) {
 
 // Returns { title, body, type, severity } for the highest-severity active issue,
 // or null if nothing warrants a notification.
-function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, lastMessage) {
+function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, fairnessImbalance, lastMessage) {
   const candidates = []
 
   const checkInSev = daysSinceCheckIn !== null ? checkInSeverity(daysSinceCheckIn) : null
@@ -987,6 +1042,9 @@ function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, las
 
   const partnerSev = partnerTasksSeverity(staleCount)
   if (partnerSev) candidates.push({ type: 'partnerTasks', severity: partnerSev, rank: SEVERITY_RANK[partnerSev] })
+
+  const fairnessSev = fairnessImbalance !== null ? fairnessSeverity(fairnessImbalance) : null
+  if (fairnessSev) candidates.push({ type: 'fairness', severity: fairnessSev, rank: SEVERITY_RANK[fairnessSev] })
 
   if (!candidates.length) return null
 
@@ -1001,10 +1059,9 @@ function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, las
 // Picks the highest-severity issue per user, selects a random non-repeat message
 // from that tier's pool, and enforces a 24h global cooldown + dedupe.
 export const smartDailyCheck = onSchedule(
-  { schedule: '0 7 * * *', timeZone: 'America/Los_Angeles' },
+  { schedule: '0 9 * * *', timeZone: 'America/Los_Angeles' },
   async () => {
     const now = new Date()
-    if (!isWithinSendWindow(now)) return
 
     const oneDayMs = 24 * 60 * 60 * 1000
     const cooldownMs = 24 * 60 * 60 * 1000
@@ -1024,6 +1081,11 @@ export const smartDailyCheck = onSchedule(
     const daysSinceDateNight = latestDateNight ? Math.floor((now - latestDateNight) / oneDayMs) : null
 
     const usersSnapshot = await db.collection('users').get()
+
+    // Pre-fetch completed tasks for fairness computation across all users
+    const completedTasksSnapshot = await db.collection('tasks').where('isCompleted', '==', true).get()
+    const completedTasks = completedTasksSnapshot.docs.map((d) => d.data())
+
     await Promise.all(
       usersSnapshot.docs.map(async (userDoc) => {
         const user = userDoc.data()
@@ -1059,10 +1121,28 @@ export const smartDailyCheck = onSchedule(
             return Math.floor((now - createdAt) / oneDayMs) >= 3
           }).length
 
+        // ── Fairness imbalance ───────────────────────────────────────────
+        const partnerDoc = usersSnapshot.docs.find((d) => d.id !== userDoc.id)
+        const partnerId = partnerDoc?.id ?? null
+        let fairnessImbalance = null
+        if (partnerId) {
+          const myCompleted = completedTasks.filter((t) => t.assignedTo === userDoc.id).length
+          const partnerCompleted = completedTasks.filter((t) => t.assignedTo === partnerId).length
+          const totalCompleted = myCompleted + partnerCompleted
+          if (totalCompleted >= 10) {
+            const myShare = myCompleted / totalCompleted
+            const imbalance = myShare - 0.5
+            // Only alert the overloaded person (positive imbalance = I'm doing more)
+            if (imbalance > 0) {
+              fairnessImbalance = imbalance
+            }
+          }
+        }
+
         const lastMessage = notifications.lastMessage ?? null
 
         // ── Build notification ───────────────────────────────────────────
-        const notif = buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, lastMessage)
+        const notif = buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, fairnessImbalance, lastMessage)
         if (!notif) return
 
         // ── Dedupe ───────────────────────────────────────────────────────
@@ -1086,3 +1166,195 @@ export const smartDailyCheck = onSchedule(
     )
   },
 )
+
+// ── Relationship feature triggers ────────────────────────────────────────────
+
+// Notifies partner when: (1) user's mood drops to low, (2) appreciation is saved after check-in,
+// or (3) user answers today's daily dialogue question.
+// Each notification is wrapped in its own try/catch so a failed send does not
+// prevent the other checks from running.
+export const onUserUpdated = onDocumentUpdated('users/{uid}', async (event) => {
+  const before = event.data.before.data()
+  const after = event.data.after.data()
+  const userId = event.params.uid
+
+  // Skip writes that only touch internal/meta fields to avoid noisy executions.
+  // We only care about mood, checkIn, and dialogue fields.
+  const moodChanged = before.moodLevel !== after.moodLevel
+  const apprChanged = (before.checkIn?.lastAppreciation ?? '') !== (after.checkIn?.lastAppreciation ?? '')
+  const dialogueChanged = (before.dialogueAnswer ?? '') !== (after.dialogueAnswer ?? '')
+  if (!moodChanged && !apprChanged && !dialogueChanged) return
+
+  const usersSnapshot = await db.collection('users').get()
+  const partnerDoc = usersSnapshot.docs.find((d) => d.id !== userId)
+  if (!partnerDoc) return
+
+  const senderName = after.name ?? 'Your partner'
+
+  // 1. Mood low alert — only when crossing into low territory
+  if (moodChanged) {
+    const moodBefore = before.moodLevel ?? 3
+    const moodAfter = after.moodLevel
+    if (moodAfter && moodAfter <= 2 && moodBefore > 2) {
+      const label = moodAfter === 1 ? 'low' : 'rough'
+      try {
+        await sendToUser(
+          partnerDoc.id,
+          'Follow Through',
+          `${senderName} is feeling ${label} today — might be worth checking in.`,
+          { kind: 'mood-alert' },
+        )
+      } catch (error) {
+        console.error('onUserUpdated: mood-alert send failed', error)
+      }
+    }
+  }
+
+  // 2. Appreciation received — when lastAppreciation changes to a non-empty value
+  if (apprChanged) {
+    const apprBefore = before.checkIn?.lastAppreciation ?? ''
+    const apprAfter = after.checkIn?.lastAppreciation ?? ''
+    if (apprAfter && apprAfter !== apprBefore) {
+      try {
+        await sendToUser(
+          partnerDoc.id,
+          senderName,
+          'Left you some appreciation after their check-in — open the app to read it.',
+          { kind: 'appreciation' },
+        )
+      } catch (error) {
+        console.error('onUserUpdated: appreciation send failed', error)
+      }
+    }
+  }
+
+  // 3. Daily dialogue answered — when today's answer is newly saved
+  if (dialogueChanged) {
+    const dialogueBefore = before.dialogueAnswer ?? ''
+    const dialogueAfter = after.dialogueAnswer ?? ''
+    if (after.dialogueDateKey && dialogueAfter && dialogueAfter !== dialogueBefore) {
+      try {
+        await sendToUser(
+          partnerDoc.id,
+          senderName,
+          "answered today's question — add yours when you get a chance.",
+          { kind: 'dialogue' },
+        )
+      } catch (error) {
+        console.error('onUserUpdated: dialogue send failed', error)
+      }
+    }
+  }
+})
+
+// Notifies both partners when the shared financial goal hits a progress milestone (25/50/75/100%).
+// Uses Promise.allSettled so one user's send failure does not prevent the milestone from
+// being marked as notified (which would cause duplicate sends on the next write).
+export const onSharedGoalUpdated = onDocumentUpdated('sharedGoals/household', async (event) => {
+  const before = event.data.before.data()
+  const after = event.data.after.data()
+
+  const target = Number(after.targetAmount ?? 0)
+  const current = Number(after.currentAmount ?? 0)
+  const prevCurrent = Number(before.currentAmount ?? 0)
+  if (!target || current <= prevCurrent) return
+
+  const percent = Math.floor((current / target) * 100)
+  const prevPercent = Math.floor((prevCurrent / target) * 100)
+  const notifiedMilestones = after.notifiedMilestones ?? []
+
+  const MILESTONES = [25, 50, 75, 100]
+  const MILESTONE_MESSAGES = {
+    25: (title) => `Quarter of the way there on ${title}! Keep going.`,
+    50: (title) => `Halfway to ${title} — you are doing it.`,
+    75: (title) => `Three-quarters saved toward ${title}. Almost there.`,
+    100: (title) => `You hit your goal: ${title}`,
+  }
+
+  for (const milestone of MILESTONES) {
+    if (percent >= milestone && prevPercent < milestone && !notifiedMilestones.includes(milestone)) {
+      const heading = milestone === 100 ? 'Goal reached!' : `${milestone}% there!`
+      const body = MILESTONE_MESSAGES[milestone](after.title ?? 'your goal')
+
+      // Mark milestone notified BEFORE sending so retries do not double-notify.
+      await db.doc('sharedGoals/household').update({
+        notifiedMilestones: admin.firestore.FieldValue.arrayUnion(milestone),
+      })
+
+      const usersSnapshot = await db.collection('users').get()
+      await Promise.allSettled(usersSnapshot.docs.map((d) =>
+        sendToUser(d.id, heading, body, { kind: 'goal-milestone', milestone: String(milestone) }),
+      ))
+
+      break // one milestone notification per update
+    }
+  }
+})
+
+// Callable function to manually test any of the relationship notification types.
+// Useful for verifying that push tokens and FCM are wired up correctly.
+// kind: 'mood-alert' | 'appreciation' | 'dialogue' | 'goal-milestone' | 'thinking-of-you'
+export const testRelationshipNotification = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'You must be signed in.')
+  }
+
+  const kind = typeof request.data?.kind === 'string' ? request.data.kind.trim() : 'mood-alert'
+  const userId = request.auth.uid
+
+  const usersSnapshot = await db.collection('users').get()
+  const allUsers = usersSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const me = allUsers.find((u) => u.id === userId)
+  const partner = allUsers.find((u) => u.id !== userId)
+
+  const myName = me?.name ?? 'Your partner'
+  const partnerName = partner?.name ?? 'Partner'
+
+  const PAYLOADS = {
+    'mood-alert': {
+      recipientId: partner?.id,
+      title: 'Follow Through',
+      body: `${myName} is feeling low today — might be worth checking in.`,
+    },
+    'appreciation': {
+      recipientId: partner?.id,
+      title: myName,
+      body: 'Left you some appreciation after their check-in — open the app to read it.',
+    },
+    'dialogue': {
+      recipientId: partner?.id,
+      title: myName,
+      body: "answered today's question — add yours when you get a chance.",
+    },
+    'goal-milestone': {
+      recipientId: null, // sends to both
+      title: '50% there!',
+      body: 'Halfway to your goal — you are doing it.',
+    },
+    'thinking-of-you': {
+      recipientId: partner?.id,
+      title: myName,
+      body: 'Thinking of you today ❤️',
+    },
+  }
+
+  const payload = PAYLOADS[kind] ?? PAYLOADS['mood-alert']
+
+  if (payload.recipientId === null) {
+    // Send to both
+    await Promise.allSettled(
+      usersSnapshot.docs.map((d) =>
+        sendToUser(d.id, payload.title, `[TEST] ${payload.body}`, { kind, test: 'true' }),
+      ),
+    )
+  } else if (payload.recipientId) {
+    await sendToUser(payload.recipientId, payload.title, `[TEST] ${payload.body}`, { kind, test: 'true' })
+  } else {
+    throw new HttpsError(
+      'failed-precondition',
+      `${partnerName} is not in the app yet. Ask them to sign in first.`,
+    )
+  }
+
+  return { ok: true, kind, sentTo: payload.recipientId ?? 'both' }
+})

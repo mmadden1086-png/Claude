@@ -1,4 +1,4 @@
-import { Bell, Heart, MoonStar, SunMedium, Target, Zap } from 'lucide-react'
+import { Bell, Heart, MessageCircleHeart, MoonStar, SunMedium, Target, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from './PageHeader'
@@ -12,12 +12,14 @@ export function MenuPage({
   notificationStatus,
   onEnableNotifications,
   onSendTestNotification,
+  onTestPartnerNotification,
   onStartHere,
   goals,
   goalSuggestion,
   onOpenGoalEditor,
   onClearToday,
   onWrapUpTomorrow,
+  onThinkingOfYou,
   onSignOut,
 }) {
   const navigate = useNavigate()
@@ -31,7 +33,7 @@ export function MenuPage({
       <SectionCard title="System controls" subtitle="Adjust how Follow Through surfaces work.">
         <div className="grid gap-2">
           <button
-            className={`rounded-3xl px-4 py-4 text-left text-sm font-semibold ${focusMode ? 'bg-ink text-white' : 'bg-white text-slate-700'}`}
+            className={`rounded-3xl px-4 py-4 text-left text-sm font-semibold transition duration-150 active:scale-[0.98] ${focusMode ? 'bg-ink text-white' : 'bg-white text-slate-700'}`}
             type="button"
             onClick={() => setFocusMode((current) => !current)}
           >
@@ -40,7 +42,7 @@ export function MenuPage({
             </span>
           </button>
           <button
-            className={`rounded-3xl px-4 py-4 text-left text-sm font-semibold ${lowEnergyMode ? 'bg-gold text-white' : 'bg-white text-slate-700'}`}
+            className={`rounded-3xl px-4 py-4 text-left text-sm font-semibold transition duration-150 active:scale-[0.98] ${lowEnergyMode ? 'bg-gold text-white' : 'bg-white text-slate-700'}`}
             type="button"
             onClick={() => setLowEnergyMode((current) => !current)}
           >
@@ -48,7 +50,7 @@ export function MenuPage({
               <MoonStar size={16} /> {lowEnergyMode ? 'Low Energy on' : 'Low Energy off'}
             </span>
           </button>
-          <button className="rounded-3xl bg-white px-4 py-4 text-left text-sm font-semibold text-slate-700" type="button" onClick={onStartHere}>
+          <button className="rounded-3xl bg-white px-4 py-4 text-left text-sm font-semibold text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={onStartHere}>
             <span className="inline-flex items-center gap-2">
               <Zap size={16} /> Go to next task
             </span>
@@ -57,10 +59,10 @@ export function MenuPage({
       </SectionCard>
 
       <SectionCard title="Evening Wrap-Up" subtitle="Close the day without clutter.">
-        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700" type="button" onClick={onClearToday}>
+        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={onClearToday}>
           Push today's tasks to tomorrow
         </button>
-        <button className="w-full rounded-3xl bg-ink px-4 py-4 text-left text-sm font-semibold text-white" type="button" onClick={onWrapUpTomorrow}>
+        <button className="w-full rounded-3xl bg-ink px-4 py-4 text-left text-sm font-semibold text-white transition duration-150 active:scale-[0.98]" type="button" onClick={onWrapUpTomorrow}>
           Wrap up — move everything and close out
         </button>
       </SectionCard>
@@ -101,13 +103,22 @@ export function MenuPage({
                 <p className="px-1 text-xs text-rose-600">{errorNote}</p>
               ) : null}
               {notificationStatus === 'enabled' ? (
-                <button
-                  className="w-full rounded-3xl bg-white px-4 py-3 text-left text-sm font-medium text-slate-600 transition duration-150 active:scale-[0.98]"
-                  type="button"
-                  onClick={onSendTestNotification}
-                >
-                  Send test notification
-                </button>
+                <>
+                  <button
+                    className="w-full rounded-3xl bg-white px-4 py-3 text-left text-sm font-medium text-slate-600 transition duration-150 active:scale-[0.98]"
+                    type="button"
+                    onClick={onSendTestNotification}
+                  >
+                    Send test notification to myself
+                  </button>
+                  <button
+                    className="w-full rounded-3xl bg-white px-4 py-3 text-left text-sm font-medium text-slate-600 transition duration-150 active:scale-[0.98]"
+                    type="button"
+                    onClick={onTestPartnerNotification}
+                  >
+                    Test partner notification (mood alert)
+                  </button>
+                </>
               ) : null}
             </>
           )
@@ -120,23 +131,36 @@ export function MenuPage({
       </SectionCard>
 
       <SectionCard title="Goals" subtitle="Keep the targets simple and adjustable.">
-        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left" type="button" onClick={() => onOpenGoalEditor('weeklyCompletion')}>
+        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenGoalEditor('weeklyCompletion')}>
           <p className="text-sm font-semibold text-ink">Weekly goal</p>
           <p className="mt-1 text-sm text-slate-600">{goals.weeklyCompletion} tasks per week</p>
         </button>
-        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left" type="button" onClick={() => onOpenGoalEditor('dailyMinimum')}>
+        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenGoalEditor('dailyMinimum')}>
           <p className="text-sm font-semibold text-ink">Daily minimum</p>
           <p className="mt-1 text-sm text-slate-600">{goals.dailyMinimum} task{goals.dailyMinimum === 1 ? '' : 's'} per day</p>
         </button>
-        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left" type="button" onClick={() => onOpenGoalEditor('reliabilityTarget')}>
+        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenGoalEditor('reliabilityTarget')}>
           <p className="text-sm font-semibold text-ink">Reliability target</p>
           <p className="mt-1 text-sm text-slate-600">{goals.reliabilityTarget}% on time</p>
         </button>
         {goalSuggestion ? <p className="px-1 text-sm text-slate-500">{goalSuggestion}</p> : null}
       </SectionCard>
 
+      <SectionCard title="Connection" subtitle="Small gestures keep the relationship warm.">
+        <button
+          className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]"
+          type="button"
+          onClick={onThinkingOfYou}
+        >
+          <span className="inline-flex items-center gap-2">
+            <MessageCircleHeart size={16} /> Send "thinking of you"
+          </span>
+        </button>
+        <p className="px-1 text-xs text-slate-500">Sends a warm push notification to your partner. One tap, no typing required.</p>
+      </SectionCard>
+
       <SectionCard title="Date Night" subtitle="Keep date ideas and date history in one dedicated place.">
-        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700" type="button" onClick={() => navigate('/dates')}>
+        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={() => navigate('/dates')}>
           <span className="inline-flex items-center gap-2">
             <Heart size={16} /> Open Date Night section
           </span>
@@ -144,7 +168,7 @@ export function MenuPage({
       </SectionCard>
 
       <SectionCard title="Session" subtitle={usingMockData ? 'Preview mode is active until Firebase keys are added.' : 'Live Firebase data is connected.'}>
-        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700" type="button" onClick={onSignOut}>
+        <button className="w-full rounded-3xl bg-white px-4 py-4 text-left text-sm font-medium text-slate-700 transition duration-150 active:scale-[0.98]" type="button" onClick={onSignOut}>
           <span className="inline-flex items-center gap-2">
             <SunMedium size={16} /> Sign out
           </span>

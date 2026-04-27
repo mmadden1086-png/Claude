@@ -73,7 +73,7 @@ export async function fetchAiDateIdeas({ existingTitles = [], preferences = {}, 
     cache.set(key, ideas)
     return ideas
 
-  } catch (err) {
+  } catch {
     console.error('AI failed, using fallback')
 
     return [

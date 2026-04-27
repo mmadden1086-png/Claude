@@ -1,4 +1,4 @@
-import { Sparkles, X } from 'lucide-react'
+import { Shield, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
 import { TimeSelect } from './TimeSelect'
@@ -43,6 +43,7 @@ function createFormState(task) {
     whyThisMatters: task.whyThisMatters ?? '',
     repeatType: task.repeatType ?? 'none',
     repeatDays: task.repeatDays ?? [],
+    protected: task.protected ?? false,
   }
 }
 
@@ -248,6 +249,7 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
       repeatType: form.repeatType,
       repeatDays: form.repeatType === 'specific-days' ? form.repeatDays : [],
       nextOccurrenceAt: repeatPreview?.toISOString() ?? null,
+      protected: form.protected,
     })
     if (!result?.blocked) onClose()
   }
@@ -771,6 +773,20 @@ export function TaskDetailModal({ task, users, currentUser, tasks = [], onClose,
               </button>
             ) : null}
           </div>
+
+          <button
+            type="button"
+            className={`flex w-full items-center justify-between rounded-3xl px-4 py-3 transition duration-150 active:scale-[0.99] ${form.protected ? 'bg-purple-50 ring-1 ring-purple-200' : 'bg-canvas'}`}
+            onClick={() => updateField('protected', !form.protected)}
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-ink">
+              <Shield size={14} className={form.protected ? 'text-purple-600' : 'text-slate-400'} />
+              Protected self-care
+            </span>
+            <span className={`text-xs font-semibold ${form.protected ? 'text-purple-600' : 'text-slate-400'}`}>
+              {form.protected ? 'On' : 'Off'}
+            </span>
+          </button>
 
           <label className="block">
             <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Repeat</span>

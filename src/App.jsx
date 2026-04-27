@@ -3,6 +3,7 @@ import { TimerReset } from 'lucide-react'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ActionSheetModal } from './components/ActionSheetModal'
+import { SharedGoalModal } from './components/SharedGoalModal'
 import { ConfirmModal } from './components/ConfirmModal'
 import { DateCompletionModal } from './components/DateCompletionModal'
 import { DateIdeaModal } from './components/DateIdeaModal'
@@ -48,7 +49,6 @@ const FILTER_STORAGE_KEY = 'follow-through-filter'
 const DATE_REMINDER_STORAGE_KEY = 'follow-through-date-reminders'
 const FOCUS_MODE_STORAGE_KEY = 'follow-through-focus-mode'
 const LOW_ENERGY_STORAGE_KEY = 'follow-through-low-energy'
-const SNOOZE_PRESET_STORAGE_KEY = 'follow-through-snooze-preset'
 const TASK_MOTION_DURATION = 140
 const TASK_MOTION_CLEAR_DELAY = 420
 
@@ -88,9 +88,14 @@ function findCurrentUser(sessionUser, users) {
     totalPoints: existing?.totalPoints ?? 0,
     weeklyPoints: existing?.weeklyPoints ?? 0,
     lastCheckInAt: existing?.lastCheckInAt ?? null,
+    moodLevel: existing?.moodLevel ?? null,
+    moodUpdatedAt: existing?.moodUpdatedAt ?? null,
+    dialogueAnswer: existing?.dialogueAnswer ?? '',
+    dialogueDateKey: existing?.dialogueDateKey ?? '',
     checkIn: {
       lastCompletedAt: existing?.checkIn?.lastCompletedAt ?? existing?.lastCheckInAt ?? null,
       nextPlannedAt: existing?.checkIn?.nextPlannedAt ?? null,
+      lastAppreciation: existing?.checkIn?.lastAppreciation ?? '',
     },
     goals,
   }
@@ -128,6 +133,11 @@ function findPartner(currentUser, users) {
     totalPoints: 0,
     weeklyPoints: 0,
     goals: DEFAULT_USER_GOALS,
+    moodLevel: null,
+    moodUpdatedAt: null,
+    dialogueAnswer: '',
+    dialogueDateKey: '',
+    checkIn: { lastCompletedAt: null, nextPlannedAt: null, lastAppreciation: '' },
   }
 }
 
@@ -220,7 +230,7 @@ function getRelatedFutureRepeats(task, tasks) {
 function App() {
   const navigate = useNavigate()
   const { sessionUser, loading: authLoading, usingMockAuth } = useAuthSession()
-  const { users, tasks, dateIdeas, dateHistory, loading, error, actions, usingMockData } = useSharedData(sessionUser)
+  const { users, tasks, dateIdeas, dateHistory, sharedGoal, loading, error, actions, usingMockData } = useSharedData(sessionUser)
   const currentUser = findCurrentUser(sessionUser, users)
   const partner = findPartner(currentUser, users)
   const usersById = useMemo(() => Object.fromEntries(users.map((user) => [user.id, user])), [users])
@@ -242,10 +252,6 @@ function App() {
   const [quickAddExpanded, setQuickAddExpanded] = useState(false)
   const [quickAddDefaults, setQuickAddDefaults] = useState({})
   const [toasts, setToasts] = useState([])
-  const [snoozePreset, setSnoozePreset] = useState(() => {
-    if (typeof window === 'undefined') return 'tomorrow'
-    return window.localStorage.getItem(SNOOZE_PRESET_STORAGE_KEY) || 'tomorrow'
-  })
   const [startModeTaskId, setStartModeTaskId] = useState(null)
   const [startTimerSeconds, setStartTimerSeconds] = useState(0)
   const [openTaskId, setOpenTaskId] = useState(null)
@@ -269,8 +275,11 @@ function App() {
   const [checkInPlanDate, setCheckInPlanDate] = useState(() => toDateInputValue(addDays(new Date(), 1)))
   const [checkInPlanTime, setCheckInPlanTime] = useState('19:00')
   const [checkInDismissTick, setCheckInDismissTick] = useState(0)
-  const [checkInPrepOpenToken, setCheckInPrepOpenToken] = useState(0)
   const [accountabilityBanner, setAccountabilityBanner] = useState('')
+  const [sharedGoalModalOpen, setSharedGoalModalOpen] = useState(false)
+  const [sharedGoalBusy, setSharedGoalBusy] = useState(false)
+  const [checkInBusy, setCheckInBusy] = useState(false)
+  const [protectedSnoozeTask, setProtectedSnoozeTask] = useState(null)
   const [selectedDateDueDate, setSelectedDateDueDate] = useState(() => toDateInputValue())
   const [taskMotion, setTaskMotion] = useState({})
   const actionLocks = useRef(new Set())
@@ -347,11 +356,6 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     if (typeof window === 'undefined') return
     window.localStorage.setItem(LOW_ENERGY_STORAGE_KEY, String(lowEnergyMode))
   }, [lowEnergyMode])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(SNOOZE_PRESET_STORAGE_KEY, snoozePreset)
-  }, [snoozePreset])
 
   useEffect(() => {
     let cancelled = false
@@ -601,20 +605,81 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     setSelectedDateDueDate(toDateInputValue())
   }
 
-  async function handleCheckInComplete() {
-    if (!currentUser) return
+  async function handleCheckInComplete(appreciation = '') {
+    if (!currentUser || checkInBusy) return
+    setCheckInBusy(true)
     const now = new Date().toISOString()
-    await actions.updateUserProfile({
-      id: currentUser.id,
-      lastCheckInAt: now,
-      checkIn: {
-        ...(currentUser.checkIn ?? {}),
-        lastCompletedAt: now,
-        nextPlannedAt: null,
-      },
-    })
-    addToast('Check-in marked complete', null)
-    setCheckInConversationPrompt(true)
+    try {
+      await actions.updateUserProfile({
+        id: currentUser.id,
+        lastCheckInAt: now,
+        checkIn: {
+          ...(currentUser.checkIn ?? {}),
+          lastCompletedAt: now,
+          nextPlannedAt: null,
+          lastAppreciation: appreciation || currentUser.checkIn?.lastAppreciation || '',
+        },
+      })
+      addToast('Check-in marked complete', null)
+      setCheckInConversationPrompt(true)
+    } catch {
+      addToast('Could not save check-in', null)
+    } finally {
+      setCheckInBusy(false)
+    }
+  }
+
+  async function handleSaveDialogueAnswer({ answer, dateKey }) {
+    if (!currentUser) return
+    try {
+      await actions.updateUserProfile({
+        id: currentUser.id,
+        dialogueAnswer: answer,
+        dialogueDateKey: dateKey,
+      })
+      addToast('Answer saved', null)
+    } catch {
+      addToast('Could not save answer', null)
+    }
+  }
+
+  async function handleSetMoodLevel(level) {
+    if (!currentUser) return
+    try {
+      await actions.updateUserProfile({
+        id: currentUser.id,
+        moodLevel: level,
+        moodUpdatedAt: new Date().toISOString(),
+      })
+    } catch {
+      addToast('Could not save mood', null)
+    }
+  }
+
+  async function handleSaveSharedGoal(updates) {
+    setSharedGoalBusy(true)
+    try {
+      await actions.upsertSharedGoal(updates)
+      setSharedGoalModalOpen(false)
+      addToast('Goal saved', null)
+    } catch {
+      addToast('Could not save goal', null)
+    } finally {
+      setSharedGoalBusy(false)
+    }
+  }
+
+  async function handleThinkingOfYou() {
+    if (!functions) {
+      addToast('Firebase is not connected', null)
+      return
+    }
+    try {
+      await httpsCallable(functions, 'sendThinkingOfYou')()
+      addToast('Sent ❤️', null)
+    } catch (error) {
+      addToast(error?.message ?? 'Could not send', null)
+    }
   }
 
   function maybePromptDateNight() {
@@ -632,7 +697,6 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
   }
 
   function handleViewCheckInDetails() {
-    setCheckInPrepOpenToken((current) => current + 1)
     navigate('/tasks')
   }
 
@@ -775,6 +839,19 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
       addToast('Test sent — check your notification shade', null)
     } catch (error) {
       addToast(error?.message ?? 'Test notification failed', null)
+    }
+  }
+
+  async function handleTestPartnerNotification() {
+    if (!functions) {
+      addToast('Firebase is not connected', null)
+      return
+    }
+    try {
+      await httpsCallable(functions, 'testRelationshipNotification')({ kind: 'mood-alert' })
+      addToast('Test sent to your partner', null)
+    } catch (error) {
+      addToast(error?.message ?? 'Partner notification test failed', null)
     }
   }
 
@@ -934,6 +1011,10 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     }
 
     if (action === 'reschedule' || action === 'snooze') {
+      if (action === 'snooze' && sourceTask.protected && !options.bypassProtected) {
+        setProtectedSnoozeTask({ task: sourceTask, snapshot })
+        return
+      }
       setActionSheet({ type: action, task: sourceTask, snapshot })
       setCustomDate('')
       return
@@ -1021,6 +1102,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
           category: sourceTask.category ?? 'Home',
           clarity: sourceTask.clarity ?? '',
           whyThisMatters: sourceTask.whyThisMatters ?? '',
+          protected: sourceTask.protected ?? false,
           repeatType: 'none',
           repeatDays: [],
           status: TASK_STATUS.NOT_STARTED,
@@ -1163,27 +1245,6 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
       ),
     )
     addToast('Kept the top 3 and pushed the rest to this week', null)
-  }
-
-  async function handleSimplifyList() {
-    if (!currentUser) return
-    const rankedOpenTasks = sortTasks(
-      filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && !task.isMissed && !task.snoozedUntil),
-      currentUser.id,
-      lowEnergyMode,
-    )
-    const keepIds = new Set(rankedOpenTasks.slice(0, 1).map((task) => task.id))
-    const toPush = rankedOpenTasks.filter((task) => !keepIds.has(task.id))
-
-    await Promise.all(
-      toPush.map((task) =>
-        actions.updateTask(task.id, {
-          urgency: 'Whenever',
-          history: appendHistory(task, 'simplify-list', currentUser.id),
-        }),
-      ),
-    )
-    addToast('Kept one task in front and moved the rest to backlog', null)
   }
 
   async function handleWeeklyReassign(task) {
@@ -1441,6 +1502,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     notificationStatus,
     onEnableNotifications: handleEnableNotifications,
     onSendTestNotification: handleSendTestNotification,
+    onTestPartnerNotification: handleTestPartnerNotification,
     onOpenGoalEditor: (goalKey) => setGoalEditor({ key: goalKey }),
     onOpenDateIdeaModal: () => { setEditingDateIdea(null); setDateIdeaModalOpen(true) },
     onOpenDateNight: () => navigate('/dates'),
@@ -1462,6 +1524,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     onKeepTopThree: handleKeepTopThree,
     onWeeklyReassign: handleWeeklyReassign,
     onCheckInComplete: handleCheckInComplete,
+    checkInBusy,
     onPlanCheckIn: handlePlanCheckIn,
     onViewCheckInDetails: handleViewCheckInDetails,
     onDismissCheckInBanner: handleDismissCheckInBanner,
@@ -1470,6 +1533,11 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     onClearToday: handleClearToday,
     onWrapUpTomorrow: handleWrapUpTomorrow,
     onSignOut: logout,
+    onSetMoodLevel: handleSetMoodLevel,
+    onSaveDialogueAnswer: handleSaveDialogueAnswer,
+    sharedGoal,
+    onEditSharedGoal: () => setSharedGoalModalOpen(true),
+    onThinkingOfYou: handleThinkingOfYou,
   }
 
   return (
@@ -1767,6 +1835,36 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
             },
           ]}
           onCancel={() => setCheckInDatePrompt(false)}
+        />
+      ) : null}
+
+      {protectedSnoozeTask ? (
+        <ConfirmModal
+          title="This is a protected self-care task"
+          body="Snoozing self-care keeps adding to your stress load. Are you sure you want to push this?"
+          actions={[
+            { label: 'Keep it', onClick: () => setProtectedSnoozeTask(null), tone: 'primary' },
+            {
+              label: 'Snooze anyway',
+              onClick: () => {
+                const { task, snapshot } = protectedSnoozeTask
+                setProtectedSnoozeTask(null)
+                setActionSheet({ type: 'snooze', task, snapshot })
+                setCustomDate('')
+              },
+              tone: 'default',
+            },
+          ]}
+          onCancel={() => setProtectedSnoozeTask(null)}
+        />
+      ) : null}
+
+      {sharedGoalModalOpen ? (
+        <SharedGoalModal
+          goal={sharedGoal}
+          onClose={() => setSharedGoalModalOpen(false)}
+          onSave={handleSaveSharedGoal}
+          busy={sharedGoalBusy}
         />
       ) : null}
     </>

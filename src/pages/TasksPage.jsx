@@ -4,6 +4,7 @@ import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { QuickAddCard } from '../components/QuickAddCard'
 import { TaskCard } from '../components/TaskCard'
+import { MoodWidget, SharedGoalCard } from './FocusPage'
 import { FILTERS, TASK_STATUS } from '../lib/constants'
 import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
@@ -56,19 +57,19 @@ export function TasksPage({
   sections,
   filteredTasks,
   currentUser,
-  users,
+  partner,
   usersById,
-  tasks,
   filterId,
   setFilterId,
-  quickAddExpanded,
-  quickAddDefaults,
   setQuickAddExpanded,
   onQuickAdd,
   onTaskAction,
   onOpenTask,
   taskMotionState,
   onWeeklyReassign,
+  sharedGoal,
+  onSetMoodLevel,
+  onEditSharedGoal,
 }) {
   const focusTask = selection?.focusTask ?? sections?.focusTask ?? null
 
@@ -129,10 +130,6 @@ export function TasksPage({
   )
 
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
-  const totalOpenCount = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
-
-  const filterLabel = FILTERS.find((filter) => filter.id === filterId)?.label ?? 'current'
-  const noFilterMatches = !searchQuery && filterId !== 'all' && allSorted.length === 0 && totalOpenCount > 0
 
   const draggingCount = visibleDraggingTasks.length
 
@@ -196,20 +193,20 @@ export function TasksPage({
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="space-y-4">
 
+          <MoodWidget currentUser={currentUser} partner={partner} onSetMoodLevel={onSetMoodLevel} />
+          <SharedGoalCard goal={sharedGoal} onEditGoal={onEditSharedGoal} />
+
           {focusTask && (
             <div className="mb-2">
-              <div className="text-xs text-slate-500 mb-1">
-                What needs attention
-              </div>
+              <p className="mb-1 text-xs text-slate-500">What needs attention</p>
               <TaskCard
                 task={focusTask}
                 currentUser={currentUser}
-                usersById={usersById}
                 onAction={onTaskAction}
                 onOpen={onOpenTask}
                 variant="focus"
-                showWhy
-                showDoneWhen
+                highlight
+                motionState={taskMotionState?.(focusTask.id)}
               />
             </div>
           )}
