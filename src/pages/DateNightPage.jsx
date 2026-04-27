@@ -179,14 +179,59 @@ export function DateNightPage({
   const filtersActive = dateFilters.budget !== 'Any' || dateFilters.duration !== 'Any' || dateFilters.category !== 'Any'
   const activeToShow = showAllActive ? active : active.slice(0, ACTIVE_PREVIEW_LIMIT)
 
-  function handlePickForUs() {
-    const pick = pickedForUs ?? fallbackPick
-    if (pick?.idea) { setPreviewPick(pick); return }
-    onOpenDateIdeaModal()
+  function buildAiRequestContext() {
+    const existingTitles = (dateIdeas ?? []).map((idea) => idea.title)
+    const recentHistory = recentCompletedDates.map((entry) => ({
+      title: entry.idea?.title ?? entry.taskTitle ?? '',
+      rating: entry.rating ?? 0,
+    }))
+    return { existingTitles, preferences: dateFilters, recentHistory }
+  }
+
+  function toAiPreviewPick(idea) {
+    return {
+      idea,
+      whyFits: idea.description || 'Suggested based on your filters, saved ideas, and recent date history.',
+      label: 'Suggested for this week',
+    }
+  }
+
+  async function getAiIdeas() {
+    const ideas = await fetchAiDateIdeas(buildAiRequestContext())
+    setAiIdeas(ideas)
+    setAddedAiTitles([])
+    return ideas
+  }
+
+  async function handlePickForUs() {
+    setAiIdeasBusy(true)
+    try {
+      const ideas = aiIdeas.length ? aiIdeas : await getAiIdeas()
+      if (ideas?.[0]) {
+        setPreviewPick(toAiPreviewPick(ideas[0]))
+        return
+      }
+      const pick = pickedForUs ?? fallbackPick
+      if (pick?.idea) { setPreviewPick(pick); return }
+      onOpenDateIdeaModal()
+    } catch (error) {
+      console.warn('AI pick failed. Falling back to saved ideas.', error)
+      const pick = pickedForUs ?? fallbackPick
+      if (pick?.idea) { setPreviewPick(pick); return }
+      onOpenDateIdeaModal()
+    } finally {
+      setAiIdeasBusy(false)
+    }
   }
 
   function handleTryAnother() {
     const currentId = previewPick?.idea?.id
+    const aiPool = aiIdeas.filter((idea) => idea.id !== currentId)
+    if (aiPool.length) {
+      setPreviewPick(toAiPreviewPick(aiPool[0]))
+      return
+    }
+
     const filteredPool = currentId ? searchedIdeaPool.filter((i) => i.id !== currentId) : searchedIdeaPool
     const pool = filteredPool.length ? filteredPool : (ideaPool.length ? ideaPool : searchedIdeaPool)
     const next = pickDateForUs(pool, dateHistory ?? [], dateFilters)
@@ -196,14 +241,8 @@ export function DateNightPage({
   async function handleGenerateAiIdeas() {
     setAiIdeasBusy(true)
     try {
-      const existingTitles = (dateIdeas ?? []).map((idea) => idea.title)
-      const recentHistory = recentCompletedDates.map((entry) => ({
-        title: entry.idea?.title ?? entry.taskTitle ?? '',
-        rating: entry.rating ?? 0,
-      }))
-      const ideas = await fetchAiDateIdeas({ existingTitles, preferences: dateFilters, recentHistory })
-      setAiIdeas(ideas)
-      setAddedAiTitles([])
+      const ideas = await getAiIdeas()
+      if (ideas?.[0] && !previewPick) setPreviewPick(toAiPreviewPick(ideas[0]))
     } catch (error) {
       console.warn('AI date ideas failed.', error)
     } finally {
@@ -259,7 +298,8 @@ export function DateNightPage({
               </p>
               {previewPick ? (
                 <div className="mt-3 rounded-2xl bg-accentSoft p-3">
-                  <p className="font-medium text-ink">{previewPick.idea.title}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-accent">{previewPick.label ?? 'Best option this week'}</p>
+                  <p className="mt-1 font-medium text-ink">{previewPick.idea.title}</p>
                   {previewPick.whyFits ? <p className="mt-1 text-sm text-accent/80">{previewPick.whyFits}</p> : null}
                   <div className="mt-3 flex gap-2">
                     <button
@@ -282,9 +322,10 @@ export function DateNightPage({
                 <button
                   className="mt-3 w-full rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
                   type="button"
+                  disabled={aiIdeasBusy}
                   onClick={handlePickForUs}
                 >
-                  Pick for us
+                  {aiIdeasBusy ? 'Finding a good option…' : 'Pick for us'}
                 </button>
               )}
               {monthlyDateStatus.status === 'planned' && monthlyDateStatus.plannedTask ? (
@@ -301,7 +342,7 @@ export function DateNightPage({
 
           <SectionCard
             title="Date ideas"
-            subtitle="Get suggestions or browse your full list."
+            subtitle="Get options or browse your saved list."
             action={(
               <div className="flex gap-2">
                 <button
@@ -311,7 +352,7 @@ export function DateNightPage({
                   onClick={handleGenerateAiIdeas}
                 >
                   <Sparkles size={13} />
-                  {aiIdeasBusy ? 'Thinking…' : 'Suggest'}
+                  {aiIdeasBusy ? 'Thinking…' : 'Get options'}
                 </button>
                 <button
                   className="rounded-full bg-white px-3 py-2 text-sm text-slate-600 transition duration-150 active:scale-[0.98]"
@@ -323,6 +364,63 @@ export function DateNightPage({
               </div>
             )}
           >
+            {aiIdeasBusy ? (
+              <div className="rounded-3xl bg-accentSoft p-4 text-sm text-accent">
+                Thinking of a few realistic options…
+              </div>
+            ) : null}
+
+            {aiIdeas.length > 0 ? (
+              <div className="space-y-3 rounded-[2rem] border border-accent/10 bg-accentSoft/60 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-accent">Suggested for you</p>
+                  <button
+                    className="text-xs font-medium text-accent transition duration-150 active:opacity-50"
+                    type="button"
+                    onClick={handleGenerateAiIdeas}
+                    disabled={aiIdeasBusy}
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {aiIdeas.map((idea) => {
+                    const added = addedAiTitles.includes(idea.title)
+                    return (
+                      <div key={idea.id ?? idea.title} className="rounded-3xl bg-white/80 p-4">
+                        <p className="font-medium text-ink">{idea.title}</p>
+                        {idea.description ? <p className="mt-1 text-sm text-slate-600">{idea.description}</p> : null}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {[idea.category, idea.budgetLevel, idea.duration].filter(Boolean).map((tag) => (
+                            <span key={tag} className="rounded-full bg-white px-3 py-1 text-xs text-slate-500">{tag}</span>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            className={`flex-1 rounded-2xl px-3 py-2 text-sm font-semibold transition duration-150 active:scale-[0.98] ${added ? 'bg-white text-slate-400' : 'bg-accent text-white'}`}
+                            type="button"
+                            disabled={added}
+                            onClick={() => handleAddAiIdea(idea)}
+                          >
+                            {added ? 'Added' : 'Save idea'}
+                          </button>
+                          {!added ? (
+                            <button
+                              className="rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-accent transition duration-150 active:scale-[0.98]"
+                              type="button"
+                              onClick={() => { handleAddAiIdea(idea); onSelectDateIdea({ ...idea, id: idea.id ?? `ai-${idea.title}` }) }}
+                            >
+                              Plan
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+
             <label className="flex items-center gap-3 rounded-3xl bg-white px-4 py-3 text-slate-500">
               <input
                 className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-slate-400"
@@ -369,7 +467,7 @@ export function DateNightPage({
                     <p className="mt-2 text-xs text-slate-500">{[entry.idea.category, entry.idea.budgetLevel, entry.idea.duration, entry.idea.locationType].filter(Boolean).join(' - ')}</p>
                     <p className="mt-2 text-sm text-slate-600">{entry.whyFits}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {index === 0 ? <p className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">Best choice</p> : null}
+                      {index === 0 ? <p className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">Best saved choice</p> : null}
                       {entry.label ? <p className="inline-flex rounded-full bg-accentSoft px-3 py-1 text-xs font-semibold text-accent">{entry.label}</p> : null}
                     </div>
                     <button
@@ -406,57 +504,6 @@ export function DateNightPage({
                 </div>
               )}
             </div>
-
-            {aiIdeas.length > 0 ? (
-              <div className="border-t border-slate-100 pt-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">AI suggestions</p>
-                  <button
-                    className="text-xs text-slate-400 transition duration-150 active:opacity-50"
-                    type="button"
-                    onClick={handleGenerateAiIdeas}
-                    disabled={aiIdeasBusy}
-                  >
-                    {aiIdeasBusy ? 'Thinking…' : 'Refresh'}
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {aiIdeas.map((idea) => {
-                    const added = addedAiTitles.includes(idea.title)
-                    return (
-                      <div key={idea.title} className="rounded-3xl bg-accentSoft p-4">
-                        <p className="font-medium text-ink">{idea.title}</p>
-                        {idea.description ? <p className="mt-1 text-sm text-slate-600">{idea.description}</p> : null}
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {[idea.category, idea.budgetLevel, idea.duration].filter(Boolean).map((tag) => (
-                            <span key={tag} className="rounded-full bg-white/70 px-3 py-1 text-xs text-slate-500">{tag}</span>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            className={`flex-1 rounded-2xl px-3 py-2 text-sm font-semibold transition duration-150 active:scale-[0.98] ${added ? 'bg-white text-slate-400' : 'bg-accent text-white'}`}
-                            type="button"
-                            disabled={added}
-                            onClick={() => handleAddAiIdea(idea)}
-                          >
-                            {added ? 'Added to list' : 'Add to my list'}
-                          </button>
-                          {!added ? (
-                            <button
-                              className="rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-accent transition duration-150 active:scale-[0.98]"
-                              type="button"
-                              onClick={() => { handleAddAiIdea(idea); onSelectDateIdea({ ...idea, id: `ai-${idea.title}` }) }}
-                            >
-                              Add &amp; plan
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ) : null}
 
             <div className="mt-1 border-t border-slate-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Your ideas</p>
