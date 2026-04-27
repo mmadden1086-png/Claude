@@ -170,7 +170,7 @@ export function useNotifications(userId) {
           return
         }
 
-        await registerPushTokenOnServer(token)
+        await registerPushTokenOnServer(userId, token)
         window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
         window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, 'true')
         if (!cancelled) setStatus('enabled')
@@ -217,6 +217,36 @@ export function useNotifications(userId) {
     return () => {
       if (unsubscribe) unsubscribe()
     }
+  }, [userId])
+
+  useEffect(() => {
+    async function refreshTokenIfRotated() {
+      if (!userId) return
+      if (typeof window === 'undefined' || typeof Notification === 'undefined') return
+      if (Notification.permission !== 'granted') return
+      if (document.visibilityState !== 'visible') return
+
+      try {
+        const messaging = await getMessagingIfSupported()
+        if (!messaging) return
+        const serviceWorkerRegistration = await ensureMessagingServiceWorker()
+        const token = await getToken(messaging, {
+          vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+          serviceWorkerRegistration,
+        })
+        if (!token) return
+        const stored = window.localStorage.getItem(NOTIFICATIONS_TOKEN_STORAGE_KEY)
+        if (token !== stored) {
+          await registerPushTokenOnServer(userId, token)
+          window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
+        }
+      } catch {
+        // non-fatal — next visibility change will retry
+      }
+    }
+
+    document.addEventListener('visibilitychange', refreshTokenIfRotated)
+    return () => document.removeEventListener('visibilitychange', refreshTokenIfRotated)
   }, [userId])
 
   async function enableNotifications() {
