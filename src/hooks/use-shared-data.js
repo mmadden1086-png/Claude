@@ -4,18 +4,20 @@ import {
   canUseFirebase,
   createDateHistory,
   createDateIdea,
+  createGoal as createGoalDoc,
   createTask,
   createTaskSafe,
+  deleteGoal as deleteGoalDoc,
   deleteTask,
   restoreTask,
   subscribeToDateHistory,
   subscribeToDateIdeas,
-  subscribeToSharedGoal,
+  subscribeToGoals,
   subscribeToTasks,
   subscribeToUsers,
   updateDateIdea as updateDateIdeaDoc,
+  updateGoal as updateGoalDoc,
   updateTask as updateTaskDoc,
-  upsertSharedGoal as upsertSharedGoalDoc,
   upsertUserProfile,
 } from '../lib/firestore'
 import { TASK_STATUS } from '../lib/constants'
@@ -26,7 +28,7 @@ export function useSharedData(currentUser) {
   const [tasks, setTasks] = useState([])
   const [dateIdeas, setDateIdeas] = useState([])
   const [dateHistory, setDateHistory] = useState([])
-  const [sharedGoal, setSharedGoal] = useState(null)
+  const [goals, setGoals] = useState([])
   const [loadedUserId, setLoadedUserId] = useState(null)
   const [error, setError] = useState(() => (canUseFirebase() ? '' : 'Firebase is not configured for this build.'))
   const currentUserId = currentUser?.id ?? currentUser?.uid ?? null
@@ -77,9 +79,9 @@ export function useSharedData(currentUser) {
         setDateHistory([])
       },
     )
-    const unsubSharedGoal = subscribeToSharedGoal(
-      (nextGoal) => { setSharedGoal(nextGoal) },
-      () => { setSharedGoal(null) },
+    const unsubGoals = subscribeToGoals(
+      (nextGoals) => { setGoals(nextGoals) },
+      () => { setGoals([]) },
     )
 
     return () => {
@@ -87,7 +89,7 @@ export function useSharedData(currentUser) {
       unsubTasks()
       unsubDateIdeas()
       unsubDateHistory()
-      unsubSharedGoal()
+      unsubGoals()
     }
   }, [currentUser, currentUserId])
 
@@ -218,12 +220,26 @@ export function useSharedData(currentUser) {
         }
         throw new Error('Firebase is not configured yet for date history.')
       },
-      async upsertSharedGoal(updates) {
+      async createGoal(payload) {
         if (canUseFirebase()) {
-          await upsertSharedGoalDoc(updates)
+          await createGoalDoc(payload)
           return
         }
-        throw new Error('Firebase is not configured yet for shared goal.')
+        throw new Error('Firebase is not configured yet for goals.')
+      },
+      async updateGoal(goalId, updates) {
+        if (canUseFirebase()) {
+          await updateGoalDoc(goalId, updates)
+          return
+        }
+        throw new Error('Firebase is not configured yet for goals.')
+      },
+      async deleteGoal(goalId) {
+        if (canUseFirebase()) {
+          await deleteGoalDoc(goalId)
+          return
+        }
+        throw new Error('Firebase is not configured yet for goals.')
       },
     }),
     [],
@@ -231,5 +247,5 @@ export function useSharedData(currentUser) {
 
   const loading = Boolean(currentUserId) && canUseFirebase() && loadedUserId !== currentUserId
 
-  return { users, tasks, dateIdeas, dateHistory, sharedGoal, loading, error, actions, usingMockData: false }
+  return { users, tasks, dateIdeas, dateHistory, goals, loading, error, actions, usingMockData: false }
 }

@@ -67,45 +67,46 @@ export function MoodWidget({ currentUser, partner, onSetMoodLevel }) {
   )
 }
 
-export function SharedGoalCard({ goal, onEditGoal }) {
-  if (!goal?.title) {
+export function GoalsSummaryCard({ goals = [] }) {
+  const navigate = useNavigate()
+  const active = goals.filter((g) => !g.isCompleted)
+  const withProgress = active.filter((g) => g.targetAmount > 0)
+  const topGoal = withProgress[0] ?? active[0] ?? null
+
+  if (!topGoal) {
     return (
       <button
         type="button"
         className="w-full rounded-3xl border border-dashed border-slate-200 bg-white/60 px-4 py-3 text-left text-sm text-slate-400 transition duration-150 active:scale-[0.99]"
-        onClick={onEditGoal}
+        onClick={() => navigate('/goals')}
       >
-        + Set a couple goal
+        + Set couple and personal goals
       </button>
     )
   }
-  const target = goal.targetAmount || 0
-  const current = Math.min(goal.currentAmount || 0, target)
+
+  const target = topGoal.targetAmount || 0
+  const current = Math.min(topGoal.currentAmount || 0, target)
   const percent = target > 0 ? Math.round((current / target) * 100) : 0
-  const u = goal.unit ? `${goal.unit} ` : ''
+  const u = topGoal.unit ? `${topGoal.unit} ` : ''
 
   return (
     <button
       type="button"
       className="w-full rounded-3xl border border-slate-100 bg-white px-4 py-3 text-left shadow-sm transition duration-150 active:scale-[0.99]"
-      onClick={onEditGoal}
+      onClick={() => navigate('/goals')}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Couple goal</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Goals · {active.length} active</p>
         {target > 0 ? <p className="text-xs font-medium text-slate-400">{percent}%</p> : null}
       </div>
-      <p className="mt-1 text-sm font-semibold text-ink">{goal.title}</p>
+      <p className="mt-1 text-sm font-semibold text-ink">{topGoal.title}</p>
       {target > 0 ? (
         <>
           <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-canvas">
-            <div
-              className="h-1.5 rounded-full bg-accent transition-all duration-500"
-              style={{ width: `${percent}%` }}
-            />
+            <div className="h-1.5 rounded-full bg-accent transition-all duration-500" style={{ width: `${percent}%` }} />
           </div>
-          <p className="mt-1.5 text-xs text-slate-500">
-            {u}{current.toLocaleString()} of {u}{target.toLocaleString()}
-          </p>
+          <p className="mt-1.5 text-xs text-slate-500">{u}{current.toLocaleString()} of {u}{target.toLocaleString()}</p>
         </>
       ) : null}
     </button>
@@ -146,7 +147,7 @@ export function FocusPage({
   accountabilityBanner,
   checkInBanner,
   checkInReview,
-  sharedGoal,
+  goals,
   onOpenDateNight,
   onPlanCheckIn,
   onViewCheckInDetails,
@@ -154,7 +155,6 @@ export function FocusPage({
   onTaskAction,
   onOpenTask,
   onSetMoodLevel,
-  onEditSharedGoal,
   setQuickAddExpanded,
   taskMotionState,
 }) {
@@ -184,7 +184,7 @@ export function FocusPage({
           <div className="space-y-4">
             <CheckInBanner checkInBanner={checkInBanner} onPlanCheckIn={onPlanCheckIn} onViewCheckInDetails={onViewCheckInDetails} onDismissCheckInBanner={onDismissCheckInBanner} />
             <MoodWidget currentUser={currentUser} partner={partner} onSetMoodLevel={onSetMoodLevel} />
-            <SharedGoalCard goal={sharedGoal} onEditGoal={onEditSharedGoal} />
+            <GoalsSummaryCard goals={goals} />
             <div className="rounded-[1.75rem] border border-white/70 bg-panel/95 p-4 shadow-card">
               <h1 className="text-2xl font-semibold text-ink">You're all caught up</h1>
               <p className="mt-2 text-sm text-slate-500">Nothing active right now. Add something new or browse what's waiting.</p>

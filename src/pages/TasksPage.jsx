@@ -3,7 +3,7 @@ import { CalendarClock, Search } from 'lucide-react'
 import { differenceInCalendarDays } from 'date-fns'
 import { SectionCard } from '../components/SectionCard'
 import { TaskCard } from '../components/TaskCard'
-import { MoodWidget, SharedGoalCard } from './FocusPage'
+import { GoalsSummaryCard, MoodWidget } from './FocusPage'
 import { FILTERS, TASK_STATUS } from '../lib/constants'
 import { getTaskStatus, isDueWithinHours, isOverdue, isSnoozed, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
@@ -66,9 +66,8 @@ export function TasksPage({
   onOpenTask,
   taskMotionState,
   onWeeklyReassign,
-  sharedGoal,
+  goals,
   onSetMoodLevel,
-  onEditSharedGoal,
 }) {
   const focusTask = selection?.focusTask ?? sections?.focusTask ?? null
 
@@ -194,7 +193,7 @@ export function TasksPage({
         <div className="space-y-4">
 
           <MoodWidget currentUser={currentUser} partner={partner} onSetMoodLevel={onSetMoodLevel} />
-          <SharedGoalCard goal={sharedGoal} onEditGoal={onEditSharedGoal} />
+          <GoalsSummaryCard goals={goals} />
 
           {focusTask && (
             <div className="mb-2">
