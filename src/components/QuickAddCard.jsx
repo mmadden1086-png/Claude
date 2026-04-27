@@ -268,7 +268,7 @@ export function QuickAddCard({ currentUser, users, tasks = [], defaults = {}, on
           disabled={isSubmitting}
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? 'Simple' : 'Expand'}
+          {expanded ? (expandedProp ? 'Close' : 'Simple') : 'Expand'}
         </button>
       </div>
 
