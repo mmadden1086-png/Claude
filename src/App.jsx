@@ -278,6 +278,7 @@ function App() {
   const [accountabilityBanner, setAccountabilityBanner] = useState('')
   const [sharedGoalModalOpen, setSharedGoalModalOpen] = useState(false)
   const [sharedGoalBusy, setSharedGoalBusy] = useState(false)
+  const [checkInBusy, setCheckInBusy] = useState(false)
   const [protectedSnoozeTask, setProtectedSnoozeTask] = useState(null)
   const [selectedDateDueDate, setSelectedDateDueDate] = useState(() => toDateInputValue())
   const [taskMotion, setTaskMotion] = useState({})
@@ -605,38 +606,54 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
   }
 
   async function handleCheckInComplete(appreciation = '') {
-    if (!currentUser) return
+    if (!currentUser || checkInBusy) return
+    setCheckInBusy(true)
     const now = new Date().toISOString()
-    await actions.updateUserProfile({
-      id: currentUser.id,
-      lastCheckInAt: now,
-      checkIn: {
-        ...(currentUser.checkIn ?? {}),
-        lastCompletedAt: now,
-        nextPlannedAt: null,
-        lastAppreciation: appreciation || currentUser.checkIn?.lastAppreciation || '',
-      },
-    })
-    addToast('Check-in marked complete', null)
-    setCheckInConversationPrompt(true)
+    try {
+      await actions.updateUserProfile({
+        id: currentUser.id,
+        lastCheckInAt: now,
+        checkIn: {
+          ...(currentUser.checkIn ?? {}),
+          lastCompletedAt: now,
+          nextPlannedAt: null,
+          lastAppreciation: appreciation || currentUser.checkIn?.lastAppreciation || '',
+        },
+      })
+      addToast('Check-in marked complete', null)
+      setCheckInConversationPrompt(true)
+    } catch {
+      addToast('Could not save check-in', null)
+    } finally {
+      setCheckInBusy(false)
+    }
   }
 
   async function handleSaveDialogueAnswer({ answer, dateKey }) {
     if (!currentUser) return
-    await actions.updateUserProfile({
-      id: currentUser.id,
-      dialogueAnswer: answer,
-      dialogueDateKey: dateKey,
-    })
+    try {
+      await actions.updateUserProfile({
+        id: currentUser.id,
+        dialogueAnswer: answer,
+        dialogueDateKey: dateKey,
+      })
+      addToast('Answer saved', null)
+    } catch {
+      addToast('Could not save answer', null)
+    }
   }
 
   async function handleSetMoodLevel(level) {
     if (!currentUser) return
-    await actions.updateUserProfile({
-      id: currentUser.id,
-      moodLevel: level,
-      moodUpdatedAt: new Date().toISOString(),
-    })
+    try {
+      await actions.updateUserProfile({
+        id: currentUser.id,
+        moodLevel: level,
+        moodUpdatedAt: new Date().toISOString(),
+      })
+    } catch {
+      addToast('Could not save mood', null)
+    }
   }
 
   async function handleSaveSharedGoal(updates) {
@@ -657,10 +674,9 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
       addToast('Firebase is not connected', null)
       return
     }
-    addToast('Sending…', null)
     try {
       await httpsCallable(functions, 'sendThinkingOfYou')()
-      addToast('Sent to your partner', null)
+      addToast('Sent ❤️', null)
     } catch (error) {
       addToast(error?.message ?? 'Could not send', null)
     }
@@ -1073,6 +1089,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
           category: sourceTask.category ?? 'Home',
           clarity: sourceTask.clarity ?? '',
           whyThisMatters: sourceTask.whyThisMatters ?? '',
+          protected: sourceTask.protected ?? false,
           repeatType: 'none',
           repeatDays: [],
           status: TASK_STATUS.NOT_STARTED,
@@ -1493,6 +1510,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     onKeepTopThree: handleKeepTopThree,
     onWeeklyReassign: handleWeeklyReassign,
     onCheckInComplete: handleCheckInComplete,
+    checkInBusy,
     onPlanCheckIn: handlePlanCheckIn,
     onViewCheckInDetails: handleViewCheckInDetails,
     onDismissCheckInBanner: handleDismissCheckInBanner,

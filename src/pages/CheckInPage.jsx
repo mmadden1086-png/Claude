@@ -45,6 +45,7 @@ export default function CheckInPage({
   onCheckInComplete,
   onSaveDialogueAnswer,
   onQuickAdd,
+  checkInBusy = false,
 }) {
   const [checkInSuggestions, setCheckInSuggestions] = useState([])
   const [checkInSuggestionsBusy, setCheckInSuggestionsBusy] = useState(false)
@@ -423,11 +424,12 @@ export default function CheckInPage({
           </div>
 
           <button
-            className="w-full rounded-2xl bg-accent px-4 py-4 text-sm font-semibold text-white transition duration-150 active:scale-[0.98]"
+            className="w-full rounded-2xl bg-accent px-4 py-4 text-sm font-semibold text-white transition duration-150 active:scale-[0.98] disabled:opacity-60"
             type="button"
+            disabled={checkInBusy}
             onClick={() => onCheckInComplete(appreciation.trim())}
           >
-            Complete check-in
+            {checkInBusy ? 'Saving…' : 'Complete check-in'}
           </button>
         </div>
       </div>

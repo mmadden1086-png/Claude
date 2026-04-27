@@ -43,7 +43,7 @@ export function SharedGoalModal({ goal, onClose, onSave, busy = false }) {
                 className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                 type="number"
                 min="0"
-                step="1"
+                step="any"
                 placeholder="5000"
                 value={targetAmount}
                 onChange={(e) => setTargetAmount(e.target.value)}
@@ -55,7 +55,7 @@ export function SharedGoalModal({ goal, onClose, onSave, busy = false }) {
                 className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                 type="number"
                 min="0"
-                step="1"
+                step="any"
                 placeholder="0"
                 value={currentAmount}
                 onChange={(e) => setCurrentAmount(e.target.value)}

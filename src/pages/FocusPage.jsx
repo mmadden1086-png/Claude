@@ -12,10 +12,26 @@ const MOOD_LEVELS = [
   { level: 5, emoji: '😄', label: 'Great' },
 ]
 
+function moodInfo(updatedAt) {
+  if (!updatedAt) return { age: '', stale: false }
+  const ms = Date.now() - new Date(updatedAt).getTime()
+  const hours = Math.floor(ms / (1000 * 60 * 60))
+  const stale = hours >= 24
+  let age = ''
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24)
+    age = `${days}d ago`
+  } else if (hours >= 1) {
+    age = `${hours}h ago`
+  }
+  return { age, stale }
+}
+
 export function MoodWidget({ currentUser, partner, onSetMoodLevel }) {
   const myLevel = currentUser?.moodLevel ?? null
   const partnerLevel = partner?.moodLevel ?? null
   const partnerName = partner?.name ?? 'Partner'
+  const { age: partnerMoodAge, stale: partnerMoodStale } = moodInfo(partner?.moodUpdatedAt)
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
@@ -35,14 +51,17 @@ export function MoodWidget({ currentUser, partner, onSetMoodLevel }) {
           </button>
         ))}
       </div>
-      {partnerLevel ? (
+      {partnerLevel && !partnerMoodStale ? (
         <p className="mt-2 text-xs text-slate-500">
           {partnerName} is feeling{' '}
           <span className="font-semibold text-ink">
             {MOOD_LEVELS.find((m) => m.level === partnerLevel)?.label ?? partnerLevel}
           </span>{' '}
           {MOOD_LEVELS.find((m) => m.level === partnerLevel)?.emoji ?? ''}
+          {partnerMoodAge ? <span className="text-slate-400"> · {partnerMoodAge}</span> : null}
         </p>
+      ) : partnerLevel && partnerMoodStale ? (
+        <p className="mt-2 text-xs text-slate-400">{partnerName} last updated {partnerMoodAge}</p>
       ) : null}
     </div>
   )
