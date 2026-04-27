@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { SectionCard } from '../components/SectionCard'
 import { PageHeader } from './PageHeader'
 
-function ToggleRow({ icon: Icon, label, enabled, onToggle }) {
+function ToggleRow({ icon: Icon = null, label, enabled, onToggle }) {
   return (
     <button
       className="flex w-full items-center justify-between gap-3 rounded-3xl bg-white px-4 py-4 text-left transition duration-150 active:scale-[0.98]"
@@ -12,7 +12,7 @@ function ToggleRow({ icon: Icon, label, enabled, onToggle }) {
       onClick={onToggle}
     >
       <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
-        <Icon size={16} /> {label}
+        {Icon ? <Icon size={16} /> : null} {label}
       </span>
       <span className={`relative h-7 w-12 rounded-full transition ${enabled ? 'bg-accent' : 'bg-slate-200'}`}>
         <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${enabled ? 'left-6' : 'left-1'}`} />
@@ -57,6 +57,34 @@ export function MenuPage({
   onSignOut,
 }) {
   const navigate = useNavigate()
+  const [phone, setPhone] = useState(currentUser?.phoneNumber ?? '')
+  const [notifEmail, setNotifEmail] = useState(currentUser?.notificationEmail ?? currentUser?.email ?? '')
+  const [phoneSaving, setPhoneSaving] = useState(false)
+  const [emailSaving, setEmailSaving] = useState(false)
+
+  async function handleSavePhone() {
+    setPhoneSaving(true)
+    await onSaveNotificationPrefs?.({ phoneNumber: phone })
+    setPhoneSaving(false)
+  }
+
+  async function handleToggleSMS() {
+    if (!currentUser?.phoneNumber && !phone.trim()) return
+    await onSaveNotificationPrefs?.({ smsEnabled: !currentUser?.smsEnabled })
+  }
+
+  async function handleSaveEmail() {
+    setEmailSaving(true)
+    await onSaveNotificationPrefs?.({ notificationEmail: notifEmail })
+    setEmailSaving(false)
+  }
+
+  async function handleToggleEmail() {
+    await onSaveNotificationPrefs?.({ emailEnabled: !currentUser?.emailEnabled })
+  }
+
+  const hasPhone = Boolean(currentUser?.phoneNumber)
+
   const isNotificationError = ['blocked', 'unsupported', 'service-worker', 'config-error', 'install-required'].includes(notificationStatus)
   const notificationLabel = {
     enabled: 'Notifications are on',
@@ -121,9 +149,63 @@ export function MenuPage({
                   </div>
                 </details>
               ) : null}
-              <div className="rounded-3xl bg-canvas p-4 text-sm text-slate-600">
-                Push alerts cover assigned tasks, due-soon reminders, check-ins, and wrap-up prompts. SMS and email are planned for later.
-              </div>
+              <details className="rounded-3xl bg-canvas px-4 py-3 text-sm text-slate-600">
+                <summary className="cursor-pointer font-semibold text-slate-700">SMS alerts</summary>
+                <div className="mt-3 space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-2xl border border-sand bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+                      type="tel"
+                      placeholder="+1 555 000 0000"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                    />
+                    <button
+                      className="shrink-0 rounded-2xl bg-white px-3 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50"
+                      type="button"
+                      disabled={phoneSaving || !phone.trim()}
+                      onClick={handleSavePhone}
+                    >
+                      {phoneSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                  <ToggleRow
+                    icon={Phone}
+                    label={currentUser?.smsEnabled ? 'SMS on' : 'SMS off'}
+                    enabled={currentUser?.smsEnabled ?? false}
+                    onToggle={handleToggleSMS}
+                  />
+                  {!hasPhone && <p className="text-xs text-slate-400">Save a phone number above to enable SMS.</p>}
+                </div>
+              </details>
+              <details className="rounded-3xl bg-canvas px-4 py-3 text-sm text-slate-600">
+                <summary className="cursor-pointer font-semibold text-slate-700">Email digests</summary>
+                <div className="mt-3 space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-2xl border border-sand bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={notifEmail}
+                      onChange={(e) => setNotifEmail(e.target.value)}
+                    />
+                    <button
+                      className="shrink-0 rounded-2xl bg-white px-3 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50"
+                      type="button"
+                      disabled={emailSaving || !notifEmail.trim()}
+                      onClick={handleSaveEmail}
+                    >
+                      {emailSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                  <ToggleRow
+                    icon={Mail}
+                    label={currentUser?.emailEnabled ? 'Email on' : 'Email off'}
+                    enabled={currentUser?.emailEnabled ?? false}
+                    onToggle={handleToggleEmail}
+                  />
+                </div>
+              </details>
             </div>
           </SectionCard>
 
