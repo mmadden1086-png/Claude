@@ -105,6 +105,17 @@ async function registerPushTokenOnServer(token) {
   await registerPushToken({ token })
 }
 
+async function sendDirectTestNotification(token) {
+  if (!functions || !token) return
+  const sendNotification = httpsCallable(functions, 'sendNotification')
+  await sendNotification({
+    token,
+    title: 'Follow Through test',
+    body: 'Notifications are connected and ready.',
+    data: { kind: 'test' },
+  })
+}
+
 export function useNotifications(userId) {
   const [status, setStatus] = useState(() => {
     if (typeof window === 'undefined' || typeof Notification === 'undefined') return 'idle'
@@ -149,11 +160,8 @@ export function useNotifications(userId) {
           return
         }
 
-        const storedToken = window.localStorage.getItem(NOTIFICATIONS_TOKEN_STORAGE_KEY)
-        if (token !== storedToken) {
-          await registerPushTokenOnServer(token)
-          window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
-        }
+        await registerPushTokenOnServer(token)
+        window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
         window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, 'true')
         if (!cancelled) setStatus('enabled')
       } catch (error) {
@@ -227,13 +235,6 @@ export function useNotifications(userId) {
         return { status: 'blocked', message: 'Notifications were blocked in this browser.' }
       }
 
-      const existingToken = window.localStorage.getItem(NOTIFICATIONS_TOKEN_STORAGE_KEY)
-      if (window.localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) === 'true' && Notification.permission === 'granted' && existingToken) {
-        await registerPushTokenOnServer(existingToken)
-        setStatus('enabled')
-        return { status: 'enabled', message: 'Test notification sent.' }
-      }
-
       const messaging = await getMessagingIfSupported()
       if (!messaging) {
         window.localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY)
@@ -266,8 +267,14 @@ export function useNotifications(userId) {
         // ignore — FCM test notification from registerPushToken will still arrive
       }
 
+      try {
+        await sendDirectTestNotification(token)
+      } catch (error) {
+        console.warn('Direct test notification failed after registration.', error)
+      }
+
       setStatus('enabled')
-      return { status: 'enabled', message: 'Notifications enabled.' }
+      return { status: 'enabled', message: 'Notifications repaired and test sent.' }
     } catch (error) {
       console.error('Notification enable failed', error)
       window.localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY)
