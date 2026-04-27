@@ -56,13 +56,9 @@ export function TasksPage({
   sections,
   filteredTasks,
   currentUser,
-  users,
   usersById,
-  tasks,
   filterId,
   setFilterId,
-  quickAddExpanded,
-  quickAddDefaults,
   setQuickAddExpanded,
   onQuickAdd,
   onTaskAction,
@@ -129,10 +125,6 @@ export function TasksPage({
   )
 
   const activeCount = filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
-  const totalOpenCount = tasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED).length
-
-  const filterLabel = FILTERS.find((filter) => filter.id === filterId)?.label ?? 'current'
-  const noFilterMatches = !searchQuery && filterId !== 'all' && allSorted.length === 0 && totalOpenCount > 0
 
   const draggingCount = visibleDraggingTasks.length
 

@@ -49,7 +49,6 @@ const FILTER_STORAGE_KEY = 'follow-through-filter'
 const DATE_REMINDER_STORAGE_KEY = 'follow-through-date-reminders'
 const FOCUS_MODE_STORAGE_KEY = 'follow-through-focus-mode'
 const LOW_ENERGY_STORAGE_KEY = 'follow-through-low-energy'
-const SNOOZE_PRESET_STORAGE_KEY = 'follow-through-snooze-preset'
 const TASK_MOTION_DURATION = 140
 const TASK_MOTION_CLEAR_DELAY = 420
 
@@ -248,10 +247,6 @@ function App() {
   const [quickAddExpanded, setQuickAddExpanded] = useState(false)
   const [quickAddDefaults, setQuickAddDefaults] = useState({})
   const [toasts, setToasts] = useState([])
-  const [snoozePreset, setSnoozePreset] = useState(() => {
-    if (typeof window === 'undefined') return 'tomorrow'
-    return window.localStorage.getItem(SNOOZE_PRESET_STORAGE_KEY) || 'tomorrow'
-  })
   const [startModeTaskId, setStartModeTaskId] = useState(null)
   const [startTimerSeconds, setStartTimerSeconds] = useState(0)
   const [openTaskId, setOpenTaskId] = useState(null)
@@ -275,7 +270,6 @@ function App() {
   const [checkInPlanDate, setCheckInPlanDate] = useState(() => toDateInputValue(addDays(new Date(), 1)))
   const [checkInPlanTime, setCheckInPlanTime] = useState('19:00')
   const [checkInDismissTick, setCheckInDismissTick] = useState(0)
-  const [checkInPrepOpenToken, setCheckInPrepOpenToken] = useState(0)
   const [accountabilityBanner, setAccountabilityBanner] = useState('')
   const [sharedGoalModalOpen, setSharedGoalModalOpen] = useState(false)
   const [sharedGoalBusy, setSharedGoalBusy] = useState(false)
@@ -356,11 +350,6 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     if (typeof window === 'undefined') return
     window.localStorage.setItem(LOW_ENERGY_STORAGE_KEY, String(lowEnergyMode))
   }, [lowEnergyMode])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(SNOOZE_PRESET_STORAGE_KEY, snoozePreset)
-  }, [snoozePreset])
 
   useEffect(() => {
     let cancelled = false
@@ -687,7 +676,6 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
   }
 
   function handleViewCheckInDetails() {
-    setCheckInPrepOpenToken((current) => current + 1)
     navigate('/tasks')
   }
 
@@ -1222,27 +1210,6 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
       ),
     )
     addToast('Kept the top 3 and pushed the rest to this week', null)
-  }
-
-  async function handleSimplifyList() {
-    if (!currentUser) return
-    const rankedOpenTasks = sortTasks(
-      filteredTasks.filter((task) => getTaskStatus(task) !== TASK_STATUS.COMPLETED && !task.isMissed && !task.snoozedUntil),
-      currentUser.id,
-      lowEnergyMode,
-    )
-    const keepIds = new Set(rankedOpenTasks.slice(0, 1).map((task) => task.id))
-    const toPush = rankedOpenTasks.filter((task) => !keepIds.has(task.id))
-
-    await Promise.all(
-      toPush.map((task) =>
-        actions.updateTask(task.id, {
-          urgency: 'Whenever',
-          history: appendHistory(task, 'simplify-list', currentUser.id),
-        }),
-      ),
-    )
-    addToast('Kept one task in front and moved the rest to backlog', null)
   }
 
   async function handleWeeklyReassign(task) {

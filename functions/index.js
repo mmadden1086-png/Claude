@@ -882,13 +882,13 @@ export const sendNotification = onCall({ region: 'us-central1' }, async (request
 const THINKING_OF_YOU_MESSAGES = [
   'Thinking of you today ❤️',
   'Just wanted you to know I appreciate you.',
-  'Hey — you matter to me. That's all.',
+  "Hey — you matter to me. That's all.",
   'Rooting for you today.',
-  'You're doing great. I see it.',
+  "You're doing great. I see it.",
   'Sending you a little love right now.',
-  'I'm glad we're in this together.',
-  'You've been on my mind. In a good way.',
-  'Today feels better knowing you're in it.',
+  "I'm glad we're in this together.",
+  "You've been on my mind. In a good way.",
+  "Today feels better knowing you're in it.",
   'Just a reminder that I love you.',
 ]
 

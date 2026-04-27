@@ -4,7 +4,7 @@ import { SectionCard } from '../components/SectionCard'
 import { StatsCard } from '../components/StatsCard'
 import { TaskCard } from '../components/TaskCard'
 import { TASK_STATUS } from '../lib/constants'
-import { formatLastHandled, getTaskStatus, isOverdue, toDate } from '../lib/format'
+import { formatLastHandled, getTaskStatus, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 
 const TABS = [
@@ -68,11 +68,6 @@ export function ActivityPage({
   const dateIdeasById = Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea]))
   const lastCheckInDate = toDate(currentUser.checkIn?.lastCompletedAt ?? currentUser.lastCheckInAt)
   const lastDateNight = dateNightSummary.lastDate
-
-  const overdueTasks = useMemo(
-    () => filteredTasks.filter((task) => isOverdue(task) && getTaskStatus(task) !== TASK_STATUS.COMPLETED).slice(0, 4),
-    [filteredTasks],
-  )
 
   const fairnessData = useMemo(() => {
     const completed = tasks.filter((task) => getTaskStatus(task) === TASK_STATUS.COMPLETED)
