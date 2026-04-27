@@ -48,7 +48,7 @@ function IdeaCard({ idea, onSelect, onEdit, onArchive, onUnarchive, isArchived =
             type="button"
             onClick={() => onSelect(idea)}
           >
-            Choose
+            Choose this
           </button>
         )}
         {onEdit && (

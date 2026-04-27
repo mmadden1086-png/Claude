@@ -140,6 +140,7 @@ export function TasksPage({
   const utilitiesSummaryLabel = draggingCount > 0
     ? `${draggingCount} need attention`
     : `${visibleUpcomingTasks.length} coming up`
+  const hasActiveSearchOrFilter = Boolean(searchQuery.trim()) || activeSegment !== 'all' || filterId !== 'all'
 
   const displayTasks = useMemo(() => {
     if (quickActionMode === 'top3') return allVisibleTasks.slice(0, 3)
@@ -284,7 +285,7 @@ export function TasksPage({
                   setUtilitiesDismissed(false)
                 }}
               >
-                <span>{utilitiesVisible ? 'Hide quick actions' : 'Quick actions'}</span>
+                <span>{utilitiesVisible ? 'Hide quick actions' : utilitiesSummaryLabel}</span>
                 <span className="text-xs text-slate-500">{utilitiesSummaryLabel}</span>
               </button>
 
@@ -386,7 +387,20 @@ export function TasksPage({
               ))
             ) : (
               <div className="rounded-[1.75rem] border border-white/70 bg-panel/95 p-4 text-sm text-slate-500 shadow-card">
-                <p>No tasks right now.</p>
+                <p>{hasActiveSearchOrFilter ? 'No tasks match this view.' : 'No tasks right now.'}</p>
+                {hasActiveSearchOrFilter ? (
+                  <button
+                    className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition duration-150 active:scale-[0.98]"
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('')
+                      setActiveSegment('all')
+                      setFilterId('all')
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                ) : null}
               </div>
             )}
           </section>
