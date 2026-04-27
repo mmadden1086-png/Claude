@@ -4,7 +4,7 @@ import { SectionCard } from '../components/SectionCard'
 import { StatsCard } from '../components/StatsCard'
 import { TaskCard } from '../components/TaskCard'
 import { TASK_STATUS } from '../lib/constants'
-import { formatLastHandled, getTaskStatus, toDate } from '../lib/format'
+import { formatLastHandled, getTaskStatus, isOverdue, toDate } from '../lib/format'
 import { PageHeader } from './PageHeader'
 
 const TABS = [
@@ -32,6 +32,33 @@ function ActionRow({ task, subtitle, onOpenTask, actions }) {
       {subtitle ? <p className="px-1 text-xs text-slate-500">{subtitle}</p> : null}
     </div>
   )
+}
+
+function eventTime(entry) {
+  return toDate(entry.createdAt ?? entry.updatedAt ?? entry.completedAt ?? entry.date ?? entry.nextDueDate)?.getTime() ?? 0
+}
+
+function repeatStatusLabel(entry) {
+  if (entry.type === 'repeat-advanced') return 'Moved forward'
+  if (entry.type === 'repeat-skipped') return 'Skipped this round'
+  return 'Ready again'
+}
+
+function repeatNextDueLabel(entry) {
+  const nextDue = toDate(entry.nextDueDate)
+  if (!nextDue) return 'Next date not set'
+  return `Next: ${nextDue.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+}
+
+function sortPartnerTasks(tasks = []) {
+  return [...tasks].sort((a, b) => {
+    const aOverdue = isOverdue(a) ? 0 : 1
+    const bOverdue = isOverdue(b) ? 0 : 1
+    if (aOverdue !== bOverdue) return aOverdue - bOverdue
+    const aDue = toDate(a.dueDate)?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const bDue = toDate(b.dueDate)?.getTime() ?? Number.MAX_SAFE_INTEGER
+    return aDue - bDue
+  })
 }
 
 export function ActivityPage({
@@ -62,12 +89,26 @@ export function ActivityPage({
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
 
-  const unreadPartnerTasks = filteredTasks.filter((task) => task.requestedBy === partner?.id && !task.acknowledgedAt)
+  const unreadPartnerTasks = useMemo(
+    () => sortPartnerTasks(filteredTasks.filter((task) => task.requestedBy === partner?.id && !task.acknowledgedAt)),
+    [filteredTasks, partner?.id],
+  )
   const draggingTasks = sections?.draggingTasks ?? []
   const repeatSuggestions = sections?.repeatSuggestions ?? []
   const dateIdeasById = Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea]))
   const lastCheckInDate = toDate(currentUser.checkIn?.lastCompletedAt ?? currentUser.lastCheckInAt)
   const lastDateNight = dateNightSummary.lastDate
+
+  const repeatCycleItems = useMemo(() => {
+    const latestByTask = new Map()
+    ;(repeatHistory ?? []).forEach((entry) => {
+      const key = entry.taskId ?? entry.taskTitle
+      if (!key) return
+      const current = latestByTask.get(key)
+      if (!current || eventTime(entry) >= eventTime(current)) latestByTask.set(key, entry)
+    })
+    return [...latestByTask.values()].sort((a, b) => eventTime(b) - eventTime(a))
+  }, [repeatHistory])
 
   const fairnessData = useMemo(() => {
     const completed = tasks.filter((task) => getTaskStatus(task) === TASK_STATUS.COMPLETED)
@@ -87,6 +128,7 @@ export function ActivityPage({
 
     return { myCount, partnerCount, myPercent, partnerPercent, byCategory }
   }, [tasks, currentUser.id, partner?.id])
+
   function handleDrilldown(view) {
     if (view?.type === 'open') {
       navigate('/tasks')
@@ -118,6 +160,19 @@ export function ActivityPage({
             meta={`${stats.totalCompleted} completed · ${stats.reliability}% reliability`}
           />
 
+          {unreadPartnerTasks.length ? (
+            <button
+              className="w-full rounded-[2rem] border border-accent/20 bg-accentSoft p-4 text-left shadow-sm transition duration-150 active:scale-[0.99]"
+              type="button"
+              onClick={() => onStatsDrilldown?.({ type: 'partner-activity', tasks: unreadPartnerTasks })}
+            >
+              <p className="text-sm font-semibold text-accent">
+                {partner?.name ?? 'Your partner'} added {unreadPartnerTasks.length} thing{unreadPartnerTasks.length === 1 ? '' : 's'} that need a decision
+              </p>
+              <p className="mt-1 text-sm text-slate-600">Review the oldest or most urgent items first.</p>
+            </button>
+          ) : null}
+
           <div className="grid grid-cols-3 gap-1 rounded-3xl bg-white p-1 shadow-sm">
             {TABS.map((tab) => (
               <button
@@ -131,7 +186,6 @@ export function ActivityPage({
             ))}
           </div>
 
-          {/* ── Overview tab ──────────────────────────────────────────────── */}
           {activeTab === 'overview' ? (
             <>
               <button
@@ -217,7 +271,6 @@ export function ActivityPage({
             </>
           ) : null}
 
-          {/* ── Balance tab ───────────────────────────────────────────────── */}
           {activeTab === 'fairness' ? (
             <>
               <SectionCard title="Household load" subtitle="Who's been carrying what, based on completed tasks.">
@@ -292,7 +345,6 @@ export function ActivityPage({
             </>
           ) : null}
 
-          {/* ── History tab ───────────────────────────────────────────────── */}
           {activeTab === 'history' ? (
             <>
               <SectionCard title="Recently handled" subtitle="Reopen one or repeat what worked.">
@@ -316,7 +368,7 @@ export function ActivityPage({
                   <div className="rounded-3xl bg-white p-4 text-sm text-slate-500">
                     <p>No recent completions yet.</p>
                     <button className="mt-3 rounded-2xl bg-accent px-3 py-2 text-sm font-semibold text-white" type="button" onClick={onStartHere}>
-                      Go to Focus
+                      Go to Tasks
                     </button>
                   </div>
                 )}
@@ -419,22 +471,32 @@ export function ActivityPage({
                 )}
               </SectionCard>
 
-              <SectionCard title="Repeat cycles" subtitle="Review the next recurring task.">
-                {repeatHistory?.length ? (
-                  repeatHistory.map((entry) => (
-                    <button
-                      key={entry.id}
-                      className="w-full rounded-3xl bg-canvas p-4 text-left"
-                      type="button"
-                      onClick={() => onOpenTask(entry.taskId)}
-                    >
-                      <p className="font-medium text-ink">{entry.taskTitle}</p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {entry.type === 'repeat-advanced' ? 'Advanced to next occurrence' : entry.type === 'repeat-skipped' ? 'Skipped to next occurrence' : 'Reactivated for the next cycle'}
-                      </p>
-                      {entry.nextDueDate ? <p className="mt-1 text-xs text-slate-500">Next due {new Date(entry.nextDueDate).toLocaleDateString()}</p> : null}
-                    </button>
-                  ))
+              <SectionCard title="Repeat cycles" subtitle="Latest recurring state only.">
+                {repeatCycleItems.length ? (
+                  <>
+                    <div className="space-y-2">
+                      {repeatCycleItems.slice(0, 3).map((entry) => (
+                        <button
+                          key={entry.taskId ?? entry.id}
+                          className="w-full rounded-2xl bg-canvas px-4 py-3 text-left transition duration-150 active:scale-[0.99]"
+                          type="button"
+                          onClick={() => entry.taskId && onOpenTask(entry.taskId)}
+                        >
+                          <p className="line-clamp-1 text-sm font-semibold text-ink">{entry.taskTitle}</p>
+                          <p className="mt-1 text-xs text-slate-600">{repeatStatusLabel(entry)} · {repeatNextDueLabel(entry)}</p>
+                        </button>
+                      ))}
+                    </div>
+                    {repeatCycleItems.length > 3 ? (
+                      <button
+                        className="mt-3 w-full rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-700"
+                        type="button"
+                        onClick={() => navigate('/tasks')}
+                      >
+                        View all recurring
+                      </button>
+                    ) : null}
+                  </>
                 ) : (
                   <div className="rounded-3xl bg-white p-4 text-sm text-slate-500">
                     <p>No repeat history yet.</p>
@@ -443,19 +505,6 @@ export function ActivityPage({
                     </button>
                   </div>
                 )}
-              </SectionCard>
-
-              <SectionCard title="Partner activity" subtitle={`What ${partner?.name ?? 'your partner'} added recently.`}>
-                <button
-                  className="w-full rounded-3xl bg-canvas p-4 text-left text-sm text-slate-600 transition duration-150 active:scale-[0.99]"
-                  type="button"
-                  onClick={() => onStatsDrilldown?.({ type: 'partner-activity', tasks: unreadPartnerTasks })}
-                >
-                  {unreadPartnerTasks.length
-                    ? `${partner?.name ?? 'Partner'} added ${unreadPartnerTasks.length} item${unreadPartnerTasks.length === 1 ? '' : 's'} — quick look?`
-                    : `No unread asks from ${partner?.name ?? 'your partner'} right now.`}
-                  {unreadPartnerTasks.length ? <span className="mt-3 inline-flex rounded-2xl bg-white px-3 py-2 font-medium text-slate-700">Review</span> : null}
-                </button>
               </SectionCard>
             </>
           ) : null}
