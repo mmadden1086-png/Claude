@@ -842,6 +842,19 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     }
   }
 
+  async function handleTestPartnerNotification() {
+    if (!functions) {
+      addToast('Firebase is not connected', null)
+      return
+    }
+    try {
+      await httpsCallable(functions, 'testRelationshipNotification')({ kind: 'mood-alert' })
+      addToast('Test sent to your partner', null)
+    } catch (error) {
+      addToast(error?.message ?? 'Partner notification test failed', null)
+    }
+  }
+
   async function restoreSnapshot(taskId, snapshot) {
     await actions.restoreTask(taskId, snapshot)
   }
@@ -1489,6 +1502,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     notificationStatus,
     onEnableNotifications: handleEnableNotifications,
     onSendTestNotification: handleSendTestNotification,
+    onTestPartnerNotification: handleTestPartnerNotification,
     onOpenGoalEditor: (goalKey) => setGoalEditor({ key: goalKey }),
     onOpenDateIdeaModal: () => { setEditingDateIdea(null); setDateIdeaModalOpen(true) },
     onOpenDateNight: () => navigate('/dates'),

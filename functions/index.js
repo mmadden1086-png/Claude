@@ -1171,10 +1171,19 @@ export const smartDailyCheck = onSchedule(
 
 // Notifies partner when: (1) user's mood drops to low, (2) appreciation is saved after check-in,
 // or (3) user answers today's daily dialogue question.
+// Each notification is wrapped in its own try/catch so a failed send does not
+// prevent the other checks from running.
 export const onUserUpdated = onDocumentUpdated('users/{uid}', async (event) => {
   const before = event.data.before.data()
   const after = event.data.after.data()
   const userId = event.params.uid
+
+  // Skip writes that only touch internal/meta fields to avoid noisy executions.
+  // We only care about mood, checkIn, and dialogue fields.
+  const moodChanged = before.moodLevel !== after.moodLevel
+  const apprChanged = (before.checkIn?.lastAppreciation ?? '') !== (after.checkIn?.lastAppreciation ?? '')
+  const dialogueChanged = (before.dialogueAnswer ?? '') !== (after.dialogueAnswer ?? '')
+  if (!moodChanged && !apprChanged && !dialogueChanged) return
 
   const usersSnapshot = await db.collection('users').get()
   const partnerDoc = usersSnapshot.docs.find((d) => d.id !== userId)
@@ -1183,51 +1192,71 @@ export const onUserUpdated = onDocumentUpdated('users/{uid}', async (event) => {
   const senderName = after.name ?? 'Your partner'
 
   // 1. Mood low alert — only when crossing into low territory
-  const moodBefore = before.moodLevel ?? 3
-  const moodAfter = after.moodLevel
-  if (moodAfter && moodAfter <= 2 && moodBefore > 2) {
-    const label = moodAfter === 1 ? 'low' : 'rough'
-    await sendToUser(
-      partnerDoc.id,
-      'Follow Through',
-      `${senderName} is feeling ${label} today — might be worth checking in.`,
-      { kind: 'mood-alert' },
-    )
+  if (moodChanged) {
+    const moodBefore = before.moodLevel ?? 3
+    const moodAfter = after.moodLevel
+    if (moodAfter && moodAfter <= 2 && moodBefore > 2) {
+      const label = moodAfter === 1 ? 'low' : 'rough'
+      try {
+        await sendToUser(
+          partnerDoc.id,
+          'Follow Through',
+          `${senderName} is feeling ${label} today — might be worth checking in.`,
+          { kind: 'mood-alert' },
+        )
+      } catch (error) {
+        console.error('onUserUpdated: mood-alert send failed', error)
+      }
+    }
   }
 
   // 2. Appreciation received — when lastAppreciation changes to a non-empty value
-  const apprBefore = before.checkIn?.lastAppreciation ?? ''
-  const apprAfter = after.checkIn?.lastAppreciation ?? ''
-  if (apprAfter && apprAfter !== apprBefore) {
-    await sendToUser(
-      partnerDoc.id,
-      senderName,
-      'Left you some appreciation after their check-in — open the app to read it.',
-      { kind: 'appreciation' },
-    )
+  if (apprChanged) {
+    const apprBefore = before.checkIn?.lastAppreciation ?? ''
+    const apprAfter = after.checkIn?.lastAppreciation ?? ''
+    if (apprAfter && apprAfter !== apprBefore) {
+      try {
+        await sendToUser(
+          partnerDoc.id,
+          senderName,
+          'Left you some appreciation after their check-in — open the app to read it.',
+          { kind: 'appreciation' },
+        )
+      } catch (error) {
+        console.error('onUserUpdated: appreciation send failed', error)
+      }
+    }
   }
 
   // 3. Daily dialogue answered — when today's answer is newly saved
-  const dialogueBefore = before.dialogueAnswer ?? ''
-  const dialogueAfter = after.dialogueAnswer ?? ''
-  if (after.dialogueDateKey && dialogueAfter && dialogueAfter !== dialogueBefore) {
-    await sendToUser(
-      partnerDoc.id,
-      senderName,
-      "answered today's question — add yours when you get a chance.",
-      { kind: 'dialogue' },
-    )
+  if (dialogueChanged) {
+    const dialogueBefore = before.dialogueAnswer ?? ''
+    const dialogueAfter = after.dialogueAnswer ?? ''
+    if (after.dialogueDateKey && dialogueAfter && dialogueAfter !== dialogueBefore) {
+      try {
+        await sendToUser(
+          partnerDoc.id,
+          senderName,
+          "answered today's question — add yours when you get a chance.",
+          { kind: 'dialogue' },
+        )
+      } catch (error) {
+        console.error('onUserUpdated: dialogue send failed', error)
+      }
+    }
   }
 })
 
 // Notifies both partners when the shared financial goal hits a progress milestone (25/50/75/100%).
+// Uses Promise.allSettled so one user's send failure does not prevent the milestone from
+// being marked as notified (which would cause duplicate sends on the next write).
 export const onSharedGoalUpdated = onDocumentUpdated('sharedGoals/household', async (event) => {
   const before = event.data.before.data()
   const after = event.data.after.data()
 
-  const target = after.targetAmount ?? 0
-  const current = after.currentAmount ?? 0
-  const prevCurrent = before.currentAmount ?? 0
+  const target = Number(after.targetAmount ?? 0)
+  const current = Number(after.currentAmount ?? 0)
+  const prevCurrent = Number(before.currentAmount ?? 0)
   if (!target || current <= prevCurrent) return
 
   const percent = Math.floor((current / target) * 100)
@@ -1247,15 +1276,85 @@ export const onSharedGoalUpdated = onDocumentUpdated('sharedGoals/household', as
       const heading = milestone === 100 ? 'Goal reached!' : `${milestone}% there!`
       const body = MILESTONE_MESSAGES[milestone](after.title ?? 'your goal')
 
-      const usersSnapshot = await db.collection('users').get()
-      await Promise.all(usersSnapshot.docs.map((d) =>
-        sendToUser(d.id, heading, body, { kind: 'goal-milestone', milestone: String(milestone) }),
-      ))
-
+      // Mark milestone notified BEFORE sending so retries do not double-notify.
       await db.doc('sharedGoals/household').update({
         notifiedMilestones: admin.firestore.FieldValue.arrayUnion(milestone),
       })
+
+      const usersSnapshot = await db.collection('users').get()
+      await Promise.allSettled(usersSnapshot.docs.map((d) =>
+        sendToUser(d.id, heading, body, { kind: 'goal-milestone', milestone: String(milestone) }),
+      ))
+
       break // one milestone notification per update
     }
   }
+})
+
+// Callable function to manually test any of the relationship notification types.
+// Useful for verifying that push tokens and FCM are wired up correctly.
+// kind: 'mood-alert' | 'appreciation' | 'dialogue' | 'goal-milestone' | 'thinking-of-you'
+export const testRelationshipNotification = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'You must be signed in.')
+  }
+
+  const kind = typeof request.data?.kind === 'string' ? request.data.kind.trim() : 'mood-alert'
+  const userId = request.auth.uid
+
+  const usersSnapshot = await db.collection('users').get()
+  const allUsers = usersSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const me = allUsers.find((u) => u.id === userId)
+  const partner = allUsers.find((u) => u.id !== userId)
+
+  const myName = me?.name ?? 'Your partner'
+  const partnerName = partner?.name ?? 'Partner'
+
+  const PAYLOADS = {
+    'mood-alert': {
+      recipientId: partner?.id,
+      title: 'Follow Through',
+      body: `${myName} is feeling low today — might be worth checking in.`,
+    },
+    'appreciation': {
+      recipientId: partner?.id,
+      title: myName,
+      body: 'Left you some appreciation after their check-in — open the app to read it.',
+    },
+    'dialogue': {
+      recipientId: partner?.id,
+      title: myName,
+      body: "answered today's question — add yours when you get a chance.",
+    },
+    'goal-milestone': {
+      recipientId: null, // sends to both
+      title: '50% there!',
+      body: 'Halfway to your goal — you are doing it.',
+    },
+    'thinking-of-you': {
+      recipientId: partner?.id,
+      title: myName,
+      body: 'Thinking of you today ❤️',
+    },
+  }
+
+  const payload = PAYLOADS[kind] ?? PAYLOADS['mood-alert']
+
+  if (payload.recipientId === null) {
+    // Send to both
+    await Promise.allSettled(
+      usersSnapshot.docs.map((d) =>
+        sendToUser(d.id, payload.title, `[TEST] ${payload.body}`, { kind, test: 'true' }),
+      ),
+    )
+  } else if (payload.recipientId) {
+    await sendToUser(payload.recipientId, payload.title, `[TEST] ${payload.body}`, { kind, test: 'true' })
+  } else {
+    throw new HttpsError(
+      'failed-precondition',
+      `${partnerName} is not in the app yet. Ask them to sign in first.`,
+    )
+  }
+
+  return { ok: true, kind, sentTo: payload.recipientId ?? 'both' }
 })
