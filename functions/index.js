@@ -31,12 +31,12 @@ async function sendSMS(to, body) {
 }
 
 async function sendEmail(to, subject, text) {
-  const apiKey = process.env.SENDGRID_API_KEY
-  const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@followthrough.app'
+  const apiKey = process.env.RESEND_API_KEY
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Follow Through <noreply@followthrough.app>'
   if (!apiKey || !to) return
-  const sgMail = (await import('@sendgrid/mail')).default
-  sgMail.setApiKey(apiKey)
-  await sgMail.send({ to, from: fromEmail, subject, text })
+  const { Resend } = await import('resend')
+  const resend = new Resend(apiKey)
+  await resend.emails.send({ from: fromEmail, to, subject, text })
 }
 
 function normalizeTaskTitle(title = 'Task') {
