@@ -226,7 +226,7 @@ export function FocusPage({
           ) : null}
           <FocusInsightBanner insight={checkInReview?.agenda?.length ? { body: getWeeklyCheckInOpening(checkInReview) } : null} />
           <MoodWidget currentUser={currentUser} partner={partner} onSetMoodLevel={onSetMoodLevel} />
-          <SharedGoalCard goal={sharedGoal} onEditGoal={onEditSharedGoal} />
+          <GoalsSummaryCard goals={goals} />
           {guidance ? (
             guidance.onClick ? (
               <button className="inline-flex px-1 text-sm font-medium text-slate-500 underline-offset-4 transition hover:text-accent hover:underline" type="button" onClick={guidance.onClick}>

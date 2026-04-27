@@ -1654,7 +1654,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
           view={statsView}
           tasks={tasks}
           stats={stats}
-          goals={userGoals}
+          userGoals={userGoals}
           onChangeView={setStatsView}
           onGoFocus={() => {
             setStatsView(null)
