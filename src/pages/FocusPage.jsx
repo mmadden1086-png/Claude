@@ -75,13 +75,14 @@ export function SharedGoalCard({ goal, onEditGoal }) {
         className="w-full rounded-3xl border border-dashed border-slate-200 bg-white/60 px-4 py-3 text-left text-sm text-slate-400 transition duration-150 active:scale-[0.99]"
         onClick={onEditGoal}
       >
-        + Set a shared financial goal
+        + Set a couple goal
       </button>
     )
   }
   const target = goal.targetAmount || 0
   const current = Math.min(goal.currentAmount || 0, target)
   const percent = target > 0 ? Math.round((current / target) * 100) : 0
+  const u = goal.unit ? `${goal.unit} ` : ''
 
   return (
     <button
@@ -90,8 +91,8 @@ export function SharedGoalCard({ goal, onEditGoal }) {
       onClick={onEditGoal}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shared goal</p>
-        <p className="text-xs font-medium text-slate-400">{percent}%</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Couple goal</p>
+        {target > 0 ? <p className="text-xs font-medium text-slate-400">{percent}%</p> : null}
       </div>
       <p className="mt-1 text-sm font-semibold text-ink">{goal.title}</p>
       {target > 0 ? (
@@ -103,7 +104,7 @@ export function SharedGoalCard({ goal, onEditGoal }) {
             />
           </div>
           <p className="mt-1.5 text-xs text-slate-500">
-            ${current.toLocaleString()} of ${target.toLocaleString()} saved
+            {u}{current.toLocaleString()} of {u}{target.toLocaleString()}
           </p>
         </>
       ) : null}

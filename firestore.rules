@@ -49,5 +49,10 @@ service cloud.firestore {
       allow create: if signedIn();
       allow update, delete: if signedIn();
     }
+
+    match /sharedGoals/{goalId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+    }
   }
 }

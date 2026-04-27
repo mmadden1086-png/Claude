@@ -2,15 +2,23 @@ import { useState } from 'react'
 
 export function SharedGoalModal({ goal, onClose, onSave, busy = false }) {
   const [title, setTitle] = useState(goal?.title ?? '')
+  const [unit, setUnit] = useState(goal?.unit ?? '')
   const [targetAmount, setTargetAmount] = useState(goal?.targetAmount ?? '')
   const [currentAmount, setCurrentAmount] = useState(goal?.currentAmount ?? '')
+
+  const hasProgress = targetAmount !== '' && targetAmount !== '0' && Number(targetAmount) > 0
 
   function handleSubmit(event) {
     event.preventDefault()
     if (!title.trim()) return
     const target = Number.parseFloat(targetAmount) || 0
     const current = Number.parseFloat(currentAmount) || 0
-    onSave({ title: title.trim(), targetAmount: target, currentAmount: Math.min(current, target) })
+    onSave({
+      title: title.trim(),
+      unit: unit.trim(),
+      targetAmount: target,
+      currentAmount: Math.min(current, target),
+    })
   }
 
   return (
@@ -22,23 +30,33 @@ export function SharedGoalModal({ goal, onClose, onSave, busy = false }) {
         className="w-full max-w-md rounded-[1.75rem] bg-panel p-6 shadow-card"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 className="text-xl font-semibold text-ink">{goal ? 'Edit shared goal' : 'Add a shared goal'}</h2>
-        <p className="mt-1 text-sm text-slate-500">Track a financial target together — visible to both of you.</p>
+        <h2 className="text-xl font-semibold text-ink">{goal ? 'Edit couple goal' : 'Set a couple goal'}</h2>
+        <p className="mt-1 text-sm text-slate-500">A shared goal both of you are working toward.</p>
         <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Goal name</span>
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Goal</span>
             <input
               className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
               type="text"
-              placeholder="e.g. Emergency fund, Vacation, New car"
+              placeholder="e.g. Pay off the car, Vacation fund, Run a 5K"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
             />
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Target ($)</span>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Unit</span>
+              <input
+                className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                type="text"
+                placeholder="$, mi, …"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Target</span>
               <input
                 className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                 type="number"
@@ -50,7 +68,7 @@ export function SharedGoalModal({ goal, onClose, onSave, busy = false }) {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Saved so far ($)</span>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">So far</span>
               <input
                 className="w-full rounded-2xl border border-sand bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                 type="number"
@@ -58,6 +76,7 @@ export function SharedGoalModal({ goal, onClose, onSave, busy = false }) {
                 step="any"
                 placeholder="0"
                 value={currentAmount}
+                disabled={!hasProgress}
                 onChange={(e) => setCurrentAmount(e.target.value)}
               />
             </label>
