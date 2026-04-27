@@ -69,7 +69,7 @@ export function MenuPage({
 
       <SectionCard title="Notifications" subtitle="Get reminders for upcoming tasks and daily summaries.">
         {(() => {
-          const isError = ['blocked', 'unsupported', 'service-worker', 'config-error'].includes(notificationStatus)
+          const isError = ['blocked', 'unsupported', 'service-worker', 'config-error', 'error'].includes(notificationStatus)
           const label = {
             enabled: 'Notifications on — tap to re-test',
             working: 'Setting up…',
@@ -78,13 +78,15 @@ export function MenuPage({
             'service-worker': 'Setup issue — try reloading',
             'config-error': 'Not configured',
             'install-required': 'Install app first',
+            error: 'Setup failed — tap to retry',
           }[notificationStatus] ?? 'Enable notifications'
           const errorNote = {
             blocked: 'Permission was denied. Open your browser settings and allow notifications for this site.',
             unsupported: 'Your browser or device doesn\'t support push notifications.',
             'service-worker': 'The notification service failed to start. Reload the app and try again.',
             'config-error': 'Push notifications aren\'t fully set up yet.',
-            'install-required': 'Add this app to your home screen, then come back to enable notifications.',
+            'install-required': 'Add Follow Through to your home screen, then come back to enable notifications.',
+            error: 'Something went wrong setting up notifications. Tap again to retry.',
           }[notificationStatus]
 
           return (

@@ -2,6 +2,7 @@ import { getToken, onMessage } from 'firebase/messaging'
 import { httpsCallable } from 'firebase/functions'
 import { useEffect, useState } from 'react'
 import { functions, getMessagingIfSupported } from '../lib/firebase'
+import { savePushToken } from '../lib/firestore'
 
 const NOTIFICATIONS_STORAGE_KEY = 'notificationsEnabled'
 const NOTIFICATIONS_TOKEN_STORAGE_KEY = 'follow-through-notification-token'
@@ -99,10 +100,19 @@ function mapNotificationError(error) {
   return { status: 'error', message: 'Could not enable notifications.' }
 }
 
-async function registerPushTokenOnServer(token) {
-  if (!functions) return
-  const registerPushToken = httpsCallable(functions, 'registerPushToken')
-  await registerPushToken({ token })
+async function registerPushTokenOnServer(userId, token) {
+  // Save directly to Firestore first — most reliable path, no extra round-trip.
+  await savePushToken(userId, token)
+
+  // Also call the Cloud Function so it can send the confirmation notification.
+  // Best-effort: token is already saved above, so a CF failure is not fatal.
+  if (functions) {
+    try {
+      await httpsCallable(functions, 'registerPushToken')({ token })
+    } catch (error) {
+      console.warn('registerPushToken CF call failed (token already saved directly):', error)
+    }
+  }
 }
 
 export function useNotifications(userId) {
@@ -151,7 +161,7 @@ export function useNotifications(userId) {
 
         const storedToken = window.localStorage.getItem(NOTIFICATIONS_TOKEN_STORAGE_KEY)
         if (token !== storedToken) {
-          await registerPushTokenOnServer(token)
+          await registerPushTokenOnServer(userId, token)
           window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
         }
         window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, 'true')
@@ -229,7 +239,7 @@ export function useNotifications(userId) {
 
       const existingToken = window.localStorage.getItem(NOTIFICATIONS_TOKEN_STORAGE_KEY)
       if (window.localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) === 'true' && Notification.permission === 'granted' && existingToken) {
-        await registerPushTokenOnServer(existingToken)
+        await registerPushTokenOnServer(userId, existingToken)
         setStatus('enabled')
         return { status: 'enabled', message: 'Test notification sent.' }
       }
@@ -243,16 +253,22 @@ export function useNotifications(userId) {
       }
 
       const serviceWorkerRegistration = await ensureMessagingServiceWorker()
-      const token = await getToken(messaging, {
-        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-        serviceWorkerRegistration,
-      })
-
-      if (!token) {
-        throw new Error('No FCM token was returned.')
+      let token = null
+      try {
+        token = await getToken(messaging, {
+          vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+          serviceWorkerRegistration,
+        })
+      } catch (swTokenError) {
+        console.warn('getToken with explicit SW failed, retrying without SW hint:', swTokenError)
+        token = await getToken(messaging, { vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY })
       }
 
-      await registerPushTokenOnServer(token)
+      if (!token) {
+        throw new Error('FCM did not return a push token. Check that Cloud Messaging is enabled in the Firebase Console.')
+      }
+
+      await registerPushTokenOnServer(userId, token)
       window.localStorage.setItem(NOTIFICATIONS_TOKEN_STORAGE_KEY, token)
       window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, 'true')
 
