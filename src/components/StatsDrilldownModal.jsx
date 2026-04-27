@@ -159,7 +159,7 @@ export function StatsDrilldownModal({
   view,
   tasks,
   stats,
-  goals,
+  userGoals: goals,
   onClose,
   onChangeView,
   onGoFocus,

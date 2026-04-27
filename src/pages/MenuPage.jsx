@@ -1,4 +1,4 @@
-import { Bell, Heart, Mail, MessageCircleHeart, MoonStar, Phone, SunMedium, Target, Zap } from 'lucide-react'
+import { Activity, Bell, Heart, Mail, MessageCircleHeart, MoonStar, Phone, SunMedium, Target, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SectionCard } from '../components/SectionCard'
@@ -48,7 +48,7 @@ export function MenuPage({
   currentUser,
   onSaveNotificationPrefs,
   onStartHere,
-  goals,
+  userGoals,
   goalSuggestion,
   onOpenGoalEditor,
   onClearToday,
@@ -221,19 +221,19 @@ export function MenuPage({
               <button className="w-full rounded-3xl bg-white px-4 py-4 text-left transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenGoalEditor('weeklyCompletion')}>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-ink">Weekly goal</p>
-                  <p className="text-sm text-slate-600">{goals.weeklyCompletion}/week</p>
+                  <p className="text-sm text-slate-600">{userGoals.weeklyCompletion}/week</p>
                 </div>
               </button>
               <button className="w-full rounded-3xl bg-white px-4 py-4 text-left transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenGoalEditor('dailyMinimum')}>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-ink">Daily minimum</p>
-                  <p className="text-sm text-slate-600">{goals.dailyMinimum}/day</p>
+                  <p className="text-sm text-slate-600">{userGoals.dailyMinimum}/day</p>
                 </div>
               </button>
               <button className="w-full rounded-3xl bg-white px-4 py-4 text-left transition duration-150 active:scale-[0.98]" type="button" onClick={() => onOpenGoalEditor('reliabilityTarget')}>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-ink">Reliability target</p>
-                  <p className="text-sm text-slate-600">{goals.reliabilityTarget}%</p>
+                  <p className="text-sm text-slate-600">{userGoals.reliabilityTarget}%</p>
                 </div>
               </button>
               {goalSuggestion ? <p className="px-1 text-sm text-slate-500">{goalSuggestion}</p> : null}
@@ -244,6 +244,7 @@ export function MenuPage({
             <div className="space-y-2">
               <CompactAction icon={MessageCircleHeart} label="Send thinking of you" onClick={onThinkingOfYou} />
               <CompactAction icon={Heart} label="Open date nights" onClick={() => navigate('/dates')} />
+              <CompactAction icon={Activity} label="View activity" onClick={() => navigate('/activity')} />
             </div>
           </SectionCard>
 

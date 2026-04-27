@@ -18,7 +18,7 @@ const usersCollection = db ? collection(db, 'users') : null
 const tasksCollection = db ? collection(db, 'tasks') : null
 const dateIdeasCollection = db ? collection(db, 'dateIdeas') : null
 const dateHistoryCollection = db ? collection(db, 'dateHistory') : null
-const sharedGoalDoc = db ? doc(db, 'sharedGoals', 'household') : null
+const goalsCollection = db ? collection(db, 'goals') : null
 
 export function canUseFirebase() {
   return hasFirebaseConfig && Boolean(db)
@@ -201,12 +201,12 @@ export async function createDateHistory(payload) {
   })
 }
 
-export function subscribeToSharedGoal(onData, onError) {
-  if (!sharedGoalDoc) return () => {}
+export function subscribeToGoals(onData, onError) {
+  if (!goalsCollection) return () => {}
   return onSnapshot(
-    sharedGoalDoc,
+    query(goalsCollection, orderBy('createdAt', 'asc')),
     (snapshot) => {
-      onData(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null)
+      onData(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })))
     },
     (error) => {
       if (onError) onError(error)
@@ -214,7 +214,17 @@ export function subscribeToSharedGoal(onData, onError) {
   )
 }
 
-export async function upsertSharedGoal(updates) {
-  if (!db) return
-  await setDoc(sharedGoalDoc, { ...updates, updatedAt: serverTimestamp() }, { merge: true })
+export async function createGoal(payload) {
+  if (!goalsCollection) throw new Error('Firestore is not configured yet.')
+  await addDoc(goalsCollection, { ...payload, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+}
+
+export async function updateGoal(goalId, updates) {
+  if (!db) throw new Error('Firestore is not configured yet.')
+  await updateDoc(doc(db, 'goals', goalId), { ...updates, updatedAt: serverTimestamp() })
+}
+
+export async function deleteGoal(goalId) {
+  if (!db) throw new Error('Firestore is not configured yet.')
+  await deleteDoc(doc(db, 'goals', goalId))
 }

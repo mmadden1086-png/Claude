@@ -3,7 +3,6 @@ import { TimerReset } from 'lucide-react'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ActionSheetModal } from './components/ActionSheetModal'
-import { SharedGoalModal } from './components/SharedGoalModal'
 import { ConfirmModal } from './components/ConfirmModal'
 import { DateCompletionModal } from './components/DateCompletionModal'
 import { DateIdeaModal } from './components/DateIdeaModal'
@@ -235,7 +234,7 @@ function getRelatedFutureRepeats(task, tasks) {
 function App() {
   const navigate = useNavigate()
   const { sessionUser, loading: authLoading, usingMockAuth } = useAuthSession()
-  const { users, tasks, dateIdeas, dateHistory, sharedGoal, loading, error, actions, usingMockData } = useSharedData(sessionUser)
+  const { users, tasks, dateIdeas, dateHistory, goals, loading, error, actions, usingMockData } = useSharedData(sessionUser)
   const currentUser = findCurrentUser(sessionUser, users)
   const partner = findPartner(currentUser, users)
   const usersById = useMemo(() => Object.fromEntries(users.map((user) => [user.id, user])), [users])
@@ -282,8 +281,6 @@ function App() {
   const [checkInDismissTick, setCheckInDismissTick] = useState(0)
   const [accountabilityBanner, setAccountabilityBanner] = useState('')
   const [pendingCancelDateTask, setPendingCancelDateTask] = useState(null)
-  const [sharedGoalModalOpen, setSharedGoalModalOpen] = useState(false)
-  const [sharedGoalBusy, setSharedGoalBusy] = useState(false)
   const [checkInBusy, setCheckInBusy] = useState(false)
   const [protectedSnoozeTask, setProtectedSnoozeTask] = useState(null)
   const [selectedDateDueDate, setSelectedDateDueDate] = useState(() => toDateInputValue())
@@ -297,7 +294,7 @@ function App() {
     () => (currentUser ? applyFilter(deferredTasks, filterId, currentUser) : []),
     [currentUser, deferredTasks, filterId],
   )
-  const goals = currentUser?.goals ?? DEFAULT_USER_GOALS
+  const userGoals = currentUser?.goals ?? DEFAULT_USER_GOALS
   const selection = useMemo(
     () => (currentUser
       ? selectTaskViews({
@@ -310,11 +307,11 @@ function App() {
       : null),
     [currentUser, deferredTasks, filterId, lowEnergyMode],
   )
-  const sections = currentUser ? deriveSections(filteredTasks, currentUser.id, lowEnergyMode, goals, selection) : null
+  const sections = currentUser ? deriveSections(filteredTasks, currentUser.id, lowEnergyMode, userGoals, selection) : null
   const stats = useMemo(() => computeStats(tasks), [tasks])
-  const goalProgress = getGoalProgress(stats, goals)
-  const focusGoalMessage = getFocusGoalMessage(stats, goals)
-  const goalSuggestion = getGoalSuggestion(stats, goals)
+  const goalProgress = getGoalProgress(stats, userGoals)
+  const focusGoalMessage = getFocusGoalMessage(stats, userGoals)
+  const goalSuggestion = getGoalSuggestion(stats, userGoals)
   const recentDates = useMemo(() => recentDateEntries(dateHistory), [dateHistory])
   const repeatHistory = useMemo(() => repeatHistoryEntries(tasks), [tasks])
   const monthlyDateStatus = useMemo(() => getMonthlyDateStatus(tasks, dateHistory), [dateHistory, tasks])
@@ -662,16 +659,30 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     }
   }
 
-  async function handleSaveSharedGoal(updates) {
-    setSharedGoalBusy(true)
+  async function handleCreateGoal(payload) {
     try {
-      await actions.upsertSharedGoal(updates)
-      setSharedGoalModalOpen(false)
-      addToast('Goal saved', null)
+      await actions.createGoal(payload)
     } catch {
       addToast('Could not save goal', null)
-    } finally {
-      setSharedGoalBusy(false)
+      throw new Error('Could not save goal')
+    }
+  }
+
+  async function handleUpdateGoal(goalId, updates) {
+    try {
+      await actions.updateGoal(goalId, updates)
+    } catch {
+      addToast('Could not update goal', null)
+      throw new Error('Could not update goal')
+    }
+  }
+
+  async function handleDeleteGoal(goalId) {
+    try {
+      await actions.deleteGoal(goalId)
+    } catch {
+      addToast('Could not delete goal', null)
+      throw new Error('Could not delete goal')
     }
   }
 
@@ -1352,7 +1363,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
       await actions.updateUserProfile({
         id: currentUser.id,
         goals: {
-          ...goals,
+          ...userGoals,
           [goalEditor.key]: value,
         },
       })
@@ -1481,7 +1492,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     error,
     usingMockData,
     stats,
-    goals,
+    userGoals,
     goalProgress,
     focusGoalMessage,
     goalSuggestion,
@@ -1547,8 +1558,10 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
     onSignOut: logout,
     onSetMoodLevel: handleSetMoodLevel,
     onSaveDialogueAnswer: handleSaveDialogueAnswer,
-    sharedGoal,
-    onEditSharedGoal: () => setSharedGoalModalOpen(true),
+    goals,
+    onCreateGoal: handleCreateGoal,
+    onUpdateGoal: handleUpdateGoal,
+    onDeleteGoal: handleDeleteGoal,
     onThinkingOfYou: handleThinkingOfYou,
     onSaveNotificationPrefs: handleSaveNotificationPrefs,
   }
@@ -1641,7 +1654,7 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
           view={statsView}
           tasks={tasks}
           stats={stats}
-          goals={goals}
+          goals={userGoals}
           onChangeView={setStatsView}
           onGoFocus={() => {
             setStatsView(null)
@@ -1743,10 +1756,10 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
 
       {goalEditor ? (
         <GoalSettingsModal
-          key={`${goalEditor.key}:${goals[goalEditor.key]}`}
+          key={`${goalEditor.key}:${userGoals[goalEditor.key]}`}
           config={{
             ...GOAL_CONFIG[goalEditor.key],
-            value: goals[goalEditor.key],
+            value: userGoals[goalEditor.key],
           }}
           onClose={() => setGoalEditor(null)}
           onSave={handleGoalSave}
@@ -1903,14 +1916,6 @@ const startModeTask = tasks.find((task) => task.id === startModeTaskId) ?? null
         />
       ) : null}
 
-      {sharedGoalModalOpen ? (
-        <SharedGoalModal
-          goal={sharedGoal}
-          onClose={() => setSharedGoalModalOpen(false)}
-          onSave={handleSaveSharedGoal}
-          busy={sharedGoalBusy}
-        />
-      ) : null}
     </>
   )
 }

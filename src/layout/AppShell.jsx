@@ -1,7 +1,8 @@
-import { Activity, ClipboardList, Heart, Menu, Users } from 'lucide-react'
+import { Activity, ClipboardList, Heart, Menu, Target, Users } from 'lucide-react'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { ActivityPage } from '../pages/ActivityPage'
 import { DateNightPage } from '../pages/DateNightPage'
+import { GoalsPage } from '../pages/GoalsPage'
 import CheckInPage from '../pages/CheckInPage'
 import { FocusPage } from '../pages/FocusPage'
 import { MenuPage } from '../pages/MenuPage'
@@ -10,8 +11,8 @@ import { TasksPage } from '../pages/TasksPage'
 const tabs = [
   { to: '/tasks', label: 'Tasks', icon: ClipboardList },
   { to: '/checkin', label: 'Check-In', icon: Users },
+  { to: '/goals', label: 'Goals', icon: Target },
   { to: '/dates', label: 'Dates', icon: Heart },
-  { to: '/activity', label: 'Activity', icon: Activity },
   { to: '/menu', label: 'Menu', icon: Menu },
 ]
 
@@ -30,6 +31,7 @@ export function AppShell({ pageProps }) {
           <Route path="/focus" element={<FocusPage {...pageProps} />} />
           <Route path="/tasks" element={<TasksPage {...pageProps} />} />
           <Route path="/checkin" element={<CheckInPage {...pageProps} />} />
+          <Route path="/goals" element={<GoalsPage {...pageProps} />} />
           <Route path="/dates" element={<DateNightPage {...pageProps} />} />
           <Route path="/plan" element={<Navigate to="/dates" replace />} />
           <Route path="/activity" element={<ActivityPage {...pageProps} />} />

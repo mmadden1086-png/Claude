@@ -50,9 +50,10 @@ service cloud.firestore {
       allow update, delete: if signedIn();
     }
 
-    match /sharedGoals/{goalId} {
+    match /goals/{goalId} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if signedIn();
     }
   }
 }
