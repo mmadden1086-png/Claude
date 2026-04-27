@@ -133,6 +133,11 @@ function findPartner(currentUser, users) {
     totalPoints: 0,
     weeklyPoints: 0,
     goals: DEFAULT_USER_GOALS,
+    moodLevel: null,
+    moodUpdatedAt: null,
+    dialogueAnswer: '',
+    dialogueDateKey: '',
+    checkIn: { lastCompletedAt: null, nextPlannedAt: null, lastAppreciation: '' },
   }
 }
 

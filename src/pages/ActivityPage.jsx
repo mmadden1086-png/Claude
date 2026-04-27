@@ -62,7 +62,7 @@ export function ActivityPage({
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
 
-  const unreadPartnerTasks = filteredTasks.filter((task) => task.requestedBy === partner.id && !task.acknowledgedAt)
+  const unreadPartnerTasks = filteredTasks.filter((task) => task.requestedBy === partner?.id && !task.acknowledgedAt)
   const draggingTasks = sections?.draggingTasks ?? []
   const repeatSuggestions = sections?.repeatSuggestions ?? []
   const dateIdeasById = Object.fromEntries((dateIdeas ?? []).map((idea) => [idea.id, idea]))

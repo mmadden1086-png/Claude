@@ -993,17 +993,6 @@ const MESSAGE_POOLS = {
 
 const SEVERITY_RANK = { low: 1, medium: 2, high: 3 }
 
-function isWithinSendWindow(now) {
-  const hour = parseInt(
-    new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      hour12: false,
-      timeZone: 'America/Los_Angeles',
-    }).format(now),
-    10,
-  )
-  return hour >= 8 && hour < 20
-}
 
 function checkInSeverity(daysSince) {
   if (daysSince >= 11) return 'high'
@@ -1070,10 +1059,9 @@ function buildNotification(daysSinceCheckIn, daysSinceDateNight, staleCount, fai
 // Picks the highest-severity issue per user, selects a random non-repeat message
 // from that tier's pool, and enforces a 24h global cooldown + dedupe.
 export const smartDailyCheck = onSchedule(
-  { schedule: '0 7 * * *', timeZone: 'America/Los_Angeles' },
+  { schedule: '0 9 * * *', timeZone: 'America/Los_Angeles' },
   async () => {
     const now = new Date()
-    if (!isWithinSendWindow(now)) return
 
     const oneDayMs = 24 * 60 * 60 * 1000
     const cooldownMs = 24 * 60 * 60 * 1000
@@ -1220,10 +1208,9 @@ export const onUserUpdated = onDocumentUpdated('users/{uid}', async (event) => {
   }
 
   // 3. Daily dialogue answered — when today's answer is newly saved
-  const todayKey = new Date().toISOString().slice(0, 10)
   const dialogueBefore = before.dialogueAnswer ?? ''
   const dialogueAfter = after.dialogueAnswer ?? ''
-  if (after.dialogueDateKey === todayKey && dialogueAfter && dialogueAfter !== dialogueBefore) {
+  if (after.dialogueDateKey && dialogueAfter && dialogueAfter !== dialogueBefore) {
     await sendToUser(
       partnerDoc.id,
       senderName,
