@@ -49,7 +49,17 @@ export function MoodWidget({ currentUser, partner, onSetMoodLevel }) {
 }
 
 export function SharedGoalCard({ goal, onEditGoal }) {
-  if (!goal?.title) return null
+  if (!goal?.title) {
+    return (
+      <button
+        type="button"
+        className="w-full rounded-3xl border border-dashed border-slate-200 bg-white/60 px-4 py-3 text-left text-sm text-slate-400 transition duration-150 active:scale-[0.99]"
+        onClick={onEditGoal}
+      >
+        + Set a shared financial goal
+      </button>
+    )
+  }
   const target = goal.targetAmount || 0
   const current = Math.min(goal.currentAmount || 0, target)
   const percent = target > 0 ? Math.round((current / target) * 100) : 0

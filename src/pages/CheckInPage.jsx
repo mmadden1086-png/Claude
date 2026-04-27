@@ -247,10 +247,10 @@ export default function CheckInPage({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Daily question</p>
             <p className="mt-2 text-sm font-medium text-ink">{todayQuestion}</p>
 
-            {myDialogueAnswerToday ? (
+            {myDialogueAnswerToday || dialogueSaved ? (
               <div className="mt-3 rounded-2xl bg-accentSoft px-3 py-2">
                 <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-accent">Your answer</p>
-                <p className="mt-0.5 text-sm text-accent">{myDialogueAnswerToday}</p>
+                <p className="mt-0.5 text-sm text-accent">{myDialogueAnswerToday || dialogueAnswer}</p>
               </div>
             ) : (
               <div className="mt-3 space-y-2">
@@ -258,11 +258,10 @@ export default function CheckInPage({
                   className="w-full rounded-2xl border border-sand bg-canvas px-3 py-2 text-sm text-ink outline-none placeholder:text-slate-400 focus:border-accent"
                   rows={2}
                   placeholder="Your answer…"
-                  value={dialogueSaved ? '' : dialogueAnswer}
+                  value={dialogueAnswer}
                   onChange={(e) => setDialogueAnswer(e.target.value)}
-                  disabled={dialogueSaved}
                 />
-                {dialogueAnswer.trim() && !dialogueSaved ? (
+                {dialogueAnswer.trim() ? (
                   <button
                     className="rounded-2xl bg-accent px-3 py-2 text-xs font-semibold text-white transition duration-150 active:scale-[0.98]"
                     type="button"
@@ -270,9 +269,6 @@ export default function CheckInPage({
                   >
                     Save answer
                   </button>
-                ) : null}
-                {dialogueSaved ? (
-                  <p className="text-xs text-slate-400">Saved — {partnerName} will see your answer here.</p>
                 ) : null}
               </div>
             )}

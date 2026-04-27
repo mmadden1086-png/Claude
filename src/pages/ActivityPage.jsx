@@ -118,7 +118,7 @@ export function ActivityPage({
             meta={`${stats.totalCompleted} completed · ${stats.reliability}% reliability`}
           />
 
-          <div className="grid grid-cols-2 gap-1 rounded-3xl bg-white p-1 shadow-sm">
+          <div className="grid grid-cols-3 gap-1 rounded-3xl bg-white p-1 shadow-sm">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -445,15 +445,15 @@ export function ActivityPage({
                 )}
               </SectionCard>
 
-              <SectionCard title="Partner activity" subtitle={`What ${partner.name} added recently.`}>
+              <SectionCard title="Partner activity" subtitle={`What ${partner?.name ?? 'your partner'} added recently.`}>
                 <button
                   className="w-full rounded-3xl bg-canvas p-4 text-left text-sm text-slate-600 transition duration-150 active:scale-[0.99]"
                   type="button"
                   onClick={() => onStatsDrilldown?.({ type: 'partner-activity', tasks: unreadPartnerTasks })}
                 >
                   {unreadPartnerTasks.length
-                    ? `${partner.name} added ${unreadPartnerTasks.length} item${unreadPartnerTasks.length === 1 ? '' : 's'} — quick look?`
-                    : `No unread asks from ${partner.name} right now.`}
+                    ? `${partner?.name ?? 'Partner'} added ${unreadPartnerTasks.length} item${unreadPartnerTasks.length === 1 ? '' : 's'} — quick look?`
+                    : `No unread asks from ${partner?.name ?? 'your partner'} right now.`}
                   {unreadPartnerTasks.length ? <span className="mt-3 inline-flex rounded-2xl bg-white px-3 py-2 font-medium text-slate-700">Review</span> : null}
                 </button>
               </SectionCard>
